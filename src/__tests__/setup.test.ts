@@ -23,7 +23,8 @@ describe('setup', () => {
   it('merges into empty settings', () => {
     const existing = {};
     const result = mergeHooks(existing, generateHooksConfig());
-    expect(result.hooks.Notification).toBeDefined();
+    const hooks = result.hooks as Record<string, unknown>;
+    expect(hooks.Notification).toBeDefined();
   });
 
   it('preserves existing hooks when merging', () => {
@@ -31,9 +32,10 @@ describe('setup', () => {
       hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'echo existing' }] }] },
     };
     const result = mergeHooks(existing, generateHooksConfig());
-    expect(result.hooks.PreToolUse).toBeDefined();
-    expect(result.hooks.PreToolUse[0].hooks[0].command).toBe('echo existing');
-    expect(result.hooks.Notification).toBeDefined();
+    const hooks = result.hooks as Record<string, Array<{ matcher: string; hooks: Array<{ type: string; command: string }> }>>;
+    expect(hooks.PreToolUse).toBeDefined();
+    expect(hooks.PreToolUse[0].hooks[0].command).toBe('echo existing');
+    expect(hooks.Notification).toBeDefined();
   });
 
   it('replaces existing chief-of-agent hooks on re-run', () => {
@@ -41,7 +43,8 @@ describe('setup', () => {
       hooks: { Notification: [{ matcher: 'permission_prompt', hooks: [{ type: 'command', command: 'chief-of-agent notify' }] }] },
     };
     const result = mergeHooks(existing, generateHooksConfig());
-    const permHooks = result.hooks.Notification.filter((h: { matcher: string }) => h.matcher === 'permission_prompt');
+    const hooks = result.hooks as Record<string, Array<{ matcher: string; hooks: Array<{ type: string; command: string }> }>>;
+    const permHooks = hooks.Notification.filter((h: { matcher: string }) => h.matcher === 'permission_prompt');
     expect(permHooks.length).toBe(1);
   });
 });

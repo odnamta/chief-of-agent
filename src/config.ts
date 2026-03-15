@@ -41,7 +41,7 @@ export class ConfigManager {
 
   set(key: string, value: unknown): void {
     const cfg = this.load();
-    (cfg as Record<string, unknown>)[key] = value;
+    (cfg as unknown as Record<string, unknown>)[key] = value;
     if (!fs.existsSync(this.configDir)) {
       fs.mkdirSync(this.configDir, { recursive: true });
     }
