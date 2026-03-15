@@ -45,24 +45,41 @@ export class NotificationDispatcher {
     return Date.now() - last < this.config.cooldown_seconds * 1000;
   }
 
-  private escapeAppleScript(str: string): string {
-    return str.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-  }
-
   dispatch(event: HookEvent): void {
     if (event.eventType === 'session_start' || event.eventType === 'session_end') return;
     if (this.isOnCooldown(event.sessionId)) return;
     this.saveCooldown(event.sessionId);
 
     if (this.config.notification_enabled) {
-      const subtitle = this.escapeAppleScript(`${event.project} ${TITLES[event.eventType]}`);
-      const body = this.escapeAppleScript(event.context || '');
-      try {
-        execFileSync('osascript', ['-e', `display notification "${body}" with title "Chief of Agent" subtitle "${subtitle}"`]);
-      } catch { /* silent */ }
-    }
+      const subtitle = `${event.project} ${TITLES[event.eventType]}`;
+      const body = event.context || '';
+      const soundKey = event.eventType as keyof Config['sounds'];
+      const soundName = this.config.sound_enabled
+        ? path.basename(this.config.sounds[soundKey] || '', '.aiff')
+        : undefined;
 
-    if (this.config.sound_enabled) {
+      try {
+        const args = [
+          '-title', 'Chief of Agent',
+          '-subtitle', subtitle,
+          '-message', body || ' ',
+          '-activate', 'dev.warp.Warp-Stable',
+          '-group', `coa-${event.sessionId}`,
+        ];
+        if (soundName) {
+          args.push('-sound', soundName);
+        }
+        execFileSync('terminal-notifier', args);
+      } catch {
+        // Fallback to osascript if terminal-notifier not installed
+        try {
+          const escapedSubtitle = subtitle.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+          const escapedBody = body.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+          execFileSync('osascript', ['-e', `display notification "${escapedBody}" with title "Chief of Agent" subtitle "${escapedSubtitle}"`]);
+        } catch { /* silent */ }
+      }
+    } else if (this.config.sound_enabled) {
+      // Sound only (no notification)
       const soundKey = event.eventType as keyof Config['sounds'];
       const soundPath = this.config.sounds[soundKey];
       if (soundPath) {

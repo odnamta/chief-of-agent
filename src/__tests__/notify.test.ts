@@ -38,35 +38,63 @@ describe('NotificationDispatcher', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('sends macOS notification for permission event', () => {
+  it('sends notification via terminal-notifier for permission event', () => {
     dispatcher.dispatch({
       sessionId: 'abc', eventType: 'permission', project: 'gis-erp',
       cwd: '/path', context: 'Bash: git push', raw: {},
     });
-    expect(execFileSync).toHaveBeenCalledWith('osascript', expect.arrayContaining(['-e']));
+    expect(execFileSync).toHaveBeenCalledWith(
+      'terminal-notifier',
+      expect.arrayContaining(['-title', 'Chief of Agent', '-subtitle', 'gis-erp needs approval']),
+    );
   });
 
-  it('plays sound for error event', () => {
+  it('includes sound name from config in notification', () => {
     dispatcher.dispatch({
       sessionId: 'abc', eventType: 'error', project: 'secbot',
       cwd: '/path', context: 'Bash: npm test', raw: {},
     });
-    expect(execFileSync).toHaveBeenCalledWith('afplay', expect.arrayContaining(['/System/Library/Sounds/Basso.aiff']));
+    expect(execFileSync).toHaveBeenCalledWith(
+      'terminal-notifier',
+      expect.arrayContaining(['-sound', 'Basso']),
+    );
+  });
+
+  it('activates Warp on notification click', () => {
+    dispatcher.dispatch({
+      sessionId: 'abc', eventType: 'permission', project: 'proj',
+      cwd: '/path', context: 'test', raw: {},
+    });
+    expect(execFileSync).toHaveBeenCalledWith(
+      'terminal-notifier',
+      expect.arrayContaining(['-activate', 'dev.warp.Warp-Stable']),
+    );
+  });
+
+  it('groups notifications by session', () => {
+    dispatcher.dispatch({
+      sessionId: 'abc123', eventType: 'permission', project: 'proj',
+      cwd: '/path', context: 'test', raw: {},
+    });
+    expect(execFileSync).toHaveBeenCalledWith(
+      'terminal-notifier',
+      expect.arrayContaining(['-group', 'coa-abc123']),
+    );
   });
 
   it('suppresses duplicate notification within cooldown', () => {
     const event = { sessionId: 'abc', eventType: 'permission' as EventType, project: 'proj', cwd: '/path', raw: {} };
     dispatcher.dispatch(event);
     dispatcher.dispatch(event);
-    const osascriptCalls = (execFileSync as ReturnType<typeof vi.fn>).mock.calls.filter((c: unknown[]) => c[0] === 'osascript');
-    expect(osascriptCalls.length).toBe(1);
+    const calls = (execFileSync as ReturnType<typeof vi.fn>).mock.calls.filter((c: unknown[]) => c[0] === 'terminal-notifier');
+    expect(calls.length).toBe(1);
   });
 
   it('allows notification from different session within cooldown', () => {
     dispatcher.dispatch({ sessionId: 'abc', eventType: 'permission', project: 'proj1', cwd: '/path1', raw: {} });
     dispatcher.dispatch({ sessionId: 'def', eventType: 'permission', project: 'proj2', cwd: '/path2', raw: {} });
-    const osascriptCalls = (execFileSync as ReturnType<typeof vi.fn>).mock.calls.filter((c: unknown[]) => c[0] === 'osascript');
-    expect(osascriptCalls.length).toBe(2);
+    const calls = (execFileSync as ReturnType<typeof vi.fn>).mock.calls.filter((c: unknown[]) => c[0] === 'terminal-notifier');
+    expect(calls.length).toBe(2);
   });
 
   it('skips sound when sound_enabled is false', () => {
@@ -76,7 +104,9 @@ describe('NotificationDispatcher', () => {
       sound_enabled: false, notification_enabled: true,
     }, cooldownPath);
     dispatcher.dispatch({ sessionId: 'abc', eventType: 'error', project: 'proj', cwd: '/path', raw: {} });
-    const afplayCalls = (execFileSync as ReturnType<typeof vi.fn>).mock.calls.filter((c: unknown[]) => c[0] === 'afplay');
-    expect(afplayCalls.length).toBe(0);
+    expect(execFileSync).toHaveBeenCalledWith(
+      'terminal-notifier',
+      expect.not.arrayContaining(['-sound']),
+    );
   });
 });
