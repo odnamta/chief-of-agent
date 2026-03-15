@@ -1,0 +1,47 @@
+import { describe, it, expect } from 'vitest';
+import { generateHooksConfig, mergeHooks } from '../setup.js';
+
+describe('setup', () => {
+  it('generates valid hooks config', () => {
+    const hooks = generateHooksConfig();
+    expect(hooks.Notification).toBeDefined();
+    expect(hooks.Notification.length).toBe(2);
+    expect(hooks.PostToolUseFailure).toBeDefined();
+    expect(hooks.Stop).toBeDefined();
+    expect(hooks.SessionStart).toBeDefined();
+    expect(hooks.SessionEnd).toBeDefined();
+  });
+
+  it('hook commands reference chief-of-agent without flags', () => {
+    const hooks = generateHooksConfig();
+    const cmd = hooks.Notification[0].hooks[0].command;
+    expect(cmd).toBe('chief-of-agent notify');
+    expect(cmd).not.toContain('--event');
+    expect(cmd).not.toContain('--session');
+  });
+
+  it('merges into empty settings', () => {
+    const existing = {};
+    const result = mergeHooks(existing, generateHooksConfig());
+    expect(result.hooks.Notification).toBeDefined();
+  });
+
+  it('preserves existing hooks when merging', () => {
+    const existing = {
+      hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'echo existing' }] }] },
+    };
+    const result = mergeHooks(existing, generateHooksConfig());
+    expect(result.hooks.PreToolUse).toBeDefined();
+    expect(result.hooks.PreToolUse[0].hooks[0].command).toBe('echo existing');
+    expect(result.hooks.Notification).toBeDefined();
+  });
+
+  it('replaces existing chief-of-agent hooks on re-run', () => {
+    const existing = {
+      hooks: { Notification: [{ matcher: 'permission_prompt', hooks: [{ type: 'command', command: 'chief-of-agent notify' }] }] },
+    };
+    const result = mergeHooks(existing, generateHooksConfig());
+    const permHooks = result.hooks.Notification.filter((h: { matcher: string }) => h.matcher === 'permission_prompt');
+    expect(permHooks.length).toBe(1);
+  });
+});
