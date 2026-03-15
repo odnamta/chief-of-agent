@@ -38,7 +38,15 @@ describe('NotificationDispatcher', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('sends notification via terminal-notifier for permission event', () => {
+  it('plays sound via afplay (bypasses Focus mode)', () => {
+    dispatcher.dispatch({
+      sessionId: 'abc', eventType: 'error', project: 'secbot',
+      cwd: '/path', context: 'Bash: npm test', raw: {},
+    });
+    expect(execFileSync).toHaveBeenCalledWith('afplay', ['/System/Library/Sounds/Basso.aiff']);
+  });
+
+  it('sends visual notification via terminal-notifier', () => {
     dispatcher.dispatch({
       sessionId: 'abc', eventType: 'permission', project: 'gis-erp',
       cwd: '/path', context: 'Bash: git push', raw: {},
@@ -49,14 +57,14 @@ describe('NotificationDispatcher', () => {
     );
   });
 
-  it('includes sound name from config in notification', () => {
+  it('includes -ignoreDnD to bypass Focus mode', () => {
     dispatcher.dispatch({
-      sessionId: 'abc', eventType: 'error', project: 'secbot',
-      cwd: '/path', context: 'Bash: npm test', raw: {},
+      sessionId: 'abc', eventType: 'permission', project: 'proj',
+      cwd: '/path', context: 'test', raw: {},
     });
     expect(execFileSync).toHaveBeenCalledWith(
       'terminal-notifier',
-      expect.arrayContaining(['-sound', 'Basso']),
+      expect.arrayContaining(['-ignoreDnD']),
     );
   });
 
@@ -71,30 +79,19 @@ describe('NotificationDispatcher', () => {
     );
   });
 
-  it('groups notifications by session', () => {
-    dispatcher.dispatch({
-      sessionId: 'abc123', eventType: 'permission', project: 'proj',
-      cwd: '/path', context: 'test', raw: {},
-    });
-    expect(execFileSync).toHaveBeenCalledWith(
-      'terminal-notifier',
-      expect.arrayContaining(['-group', 'coa-abc123']),
-    );
-  });
-
   it('suppresses duplicate notification within cooldown', () => {
     const event = { sessionId: 'abc', eventType: 'permission' as EventType, project: 'proj', cwd: '/path', raw: {} };
     dispatcher.dispatch(event);
     dispatcher.dispatch(event);
-    const calls = (execFileSync as ReturnType<typeof vi.fn>).mock.calls.filter((c: unknown[]) => c[0] === 'terminal-notifier');
-    expect(calls.length).toBe(1);
+    const notifyCalls = (execFileSync as ReturnType<typeof vi.fn>).mock.calls.filter((c: unknown[]) => c[0] === 'terminal-notifier');
+    expect(notifyCalls.length).toBe(1);
   });
 
   it('allows notification from different session within cooldown', () => {
     dispatcher.dispatch({ sessionId: 'abc', eventType: 'permission', project: 'proj1', cwd: '/path1', raw: {} });
     dispatcher.dispatch({ sessionId: 'def', eventType: 'permission', project: 'proj2', cwd: '/path2', raw: {} });
-    const calls = (execFileSync as ReturnType<typeof vi.fn>).mock.calls.filter((c: unknown[]) => c[0] === 'terminal-notifier');
-    expect(calls.length).toBe(2);
+    const notifyCalls = (execFileSync as ReturnType<typeof vi.fn>).mock.calls.filter((c: unknown[]) => c[0] === 'terminal-notifier');
+    expect(notifyCalls.length).toBe(2);
   });
 
   it('skips sound when sound_enabled is false', () => {
@@ -104,9 +101,19 @@ describe('NotificationDispatcher', () => {
       sound_enabled: false, notification_enabled: true,
     }, cooldownPath);
     dispatcher.dispatch({ sessionId: 'abc', eventType: 'error', project: 'proj', cwd: '/path', raw: {} });
-    expect(execFileSync).toHaveBeenCalledWith(
-      'terminal-notifier',
-      expect.not.arrayContaining(['-sound']),
-    );
+    const afplayCalls = (execFileSync as ReturnType<typeof vi.fn>).mock.calls.filter((c: unknown[]) => c[0] === 'afplay');
+    expect(afplayCalls.length).toBe(0);
+  });
+
+  it('sound and notification are independent calls', () => {
+    dispatcher.dispatch({
+      sessionId: 'abc', eventType: 'permission', project: 'proj',
+      cwd: '/path', context: 'test', raw: {},
+    });
+    // Should have both afplay AND terminal-notifier calls
+    const afplayCalls = (execFileSync as ReturnType<typeof vi.fn>).mock.calls.filter((c: unknown[]) => c[0] === 'afplay');
+    const notifyCalls = (execFileSync as ReturnType<typeof vi.fn>).mock.calls.filter((c: unknown[]) => c[0] === 'terminal-notifier');
+    expect(afplayCalls.length).toBe(1);
+    expect(notifyCalls.length).toBe(1);
   });
 });

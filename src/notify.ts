@@ -50,26 +50,29 @@ export class NotificationDispatcher {
     if (this.isOnCooldown(event.sessionId)) return;
     this.saveCooldown(event.sessionId);
 
+    // Sound via afplay — plays directly through audio system, NOT affected by Focus mode
+    if (this.config.sound_enabled) {
+      const soundKey = event.eventType as keyof Config['sounds'];
+      const soundPath = this.config.sounds[soundKey];
+      if (soundPath) {
+        try { execFileSync('afplay', [soundPath]); } catch { /* silent */ }
+      }
+    }
+
+    // Visual notification via terminal-notifier — may be blocked by Focus mode
     if (this.config.notification_enabled) {
       const subtitle = `${event.project} ${TITLES[event.eventType]}`;
       const body = event.context || '';
-      const soundKey = event.eventType as keyof Config['sounds'];
-      const soundName = this.config.sound_enabled
-        ? path.basename(this.config.sounds[soundKey] || '', '.aiff')
-        : undefined;
 
       try {
-        const args = [
+        execFileSync('terminal-notifier', [
           '-title', 'Chief of Agent',
           '-subtitle', subtitle,
           '-message', body || ' ',
           '-activate', 'dev.warp.Warp-Stable',
           '-group', `coa-${event.sessionId}`,
-        ];
-        if (soundName) {
-          args.push('-sound', soundName);
-        }
-        execFileSync('terminal-notifier', args);
+          '-ignoreDnD',
+        ]);
       } catch {
         // Fallback to osascript if terminal-notifier not installed
         try {
@@ -77,13 +80,6 @@ export class NotificationDispatcher {
           const escapedBody = body.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
           execFileSync('osascript', ['-e', `display notification "${escapedBody}" with title "Chief of Agent" subtitle "${escapedSubtitle}"`]);
         } catch { /* silent */ }
-      }
-    } else if (this.config.sound_enabled) {
-      // Sound only (no notification)
-      const soundKey = event.eventType as keyof Config['sounds'];
-      const soundPath = this.config.sounds[soundKey];
-      if (soundPath) {
-        try { execFileSync('afplay', [soundPath]); } catch { /* silent */ }
       }
     }
 
