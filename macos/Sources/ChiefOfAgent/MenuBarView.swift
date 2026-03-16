@@ -1,4 +1,5 @@
 import SwiftUI
+import ChiefOfAgentCore
 
 struct MenuBarView: View {
     @ObservedObject var stateWatcher: StateWatcher

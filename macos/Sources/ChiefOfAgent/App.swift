@@ -1,4 +1,5 @@
 import SwiftUI
+import ChiefOfAgentCore
 
 @main
 struct ChiefOfAgentApp: App {
