@@ -11,14 +11,12 @@ struct ChiefOfAgentApp: App {
         let watcher = StateWatcher()
         let notifier = NotificationManager()
 
-        // Wire notification bridge: when a session transitions to waiting/error, fire notification
         watcher.onTransition = { sessionId, session, from in
             Task { @MainActor in
                 notifier.notifyIfNeeded(sessionId: sessionId, session: session)
             }
         }
 
-        // Start polling and request permission immediately — not on first UI open
         watcher.start()
         notifier.requestPermission()
 
@@ -30,7 +28,11 @@ struct ChiefOfAgentApp: App {
         MenuBarExtra {
             MenuBarView(stateWatcher: stateWatcher)
         } label: {
-            MenuBarLabel(attentionCount: stateWatcher.attentionCount)
+            let count = stateWatcher.attentionCount
+            Label(
+                count > 0 ? "\(count)" : "",
+                systemImage: count > 0 ? "exclamationmark.circle.fill" : "cpu"
+            )
         }
         .menuBarExtraStyle(.window)
     }
