@@ -144,6 +144,8 @@ struct SettingsView: View {
             try? FileManager.default.createDirectory(atPath: configDir, withIntermediateDirectories: true)
             let tmpPath = configPath + ".tmp"
             try? data.write(to: URL(fileURLWithPath: tmpPath))
+            // moveItem fails if destination exists — remove first
+            try? FileManager.default.removeItem(atPath: configPath)
             try? FileManager.default.moveItem(atPath: tmpPath, toPath: configPath)
         }
     }

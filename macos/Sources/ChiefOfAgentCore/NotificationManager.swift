@@ -29,6 +29,7 @@ public class NotificationManager: NSObject, ObservableObject, UNUserNotification
 
     public func notifyIfNeeded(sessionId: String, session: SessionData) {
         guard hasPermission else { return }
+        guard isNotificationEnabled() else { return }
         guard !isInQuietHours() else { return }
 
         let content = UNMutableNotificationContent()
@@ -97,6 +98,12 @@ public class NotificationManager: NSObject, ObservableObject, UNUserNotification
         }
     }
 
+    private func isNotificationEnabled() -> Bool {
+        let config = loadConfig()
+        // Default to true if not set
+        return (config["notification_enabled"] as? Bool) ?? true
+    }
+
     private func loadConfig() -> [String: Any] {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let configPath = "\(home)/.chief-of-agent/config.json"
@@ -116,7 +123,9 @@ public class NotificationManager: NSObject, ObservableObject, UNUserNotification
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        WarpActivator.activate()
+        Task { @MainActor in
+            WarpActivator.activate()
+        }
         completionHandler()
     }
 

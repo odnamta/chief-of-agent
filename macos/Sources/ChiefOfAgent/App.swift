@@ -4,29 +4,35 @@ import ChiefOfAgentCore
 
 @main
 struct ChiefOfAgentApp: App {
-    @StateObject private var stateWatcher = StateWatcher()
-    @StateObject private var notificationManager = NotificationManager()
+    @StateObject private var stateWatcher: StateWatcher
+    @StateObject private var notificationManager: NotificationManager
+
+    init() {
+        let watcher = StateWatcher()
+        let notifier = NotificationManager()
+
+        // Wire notification bridge: when a session transitions to waiting/error, fire notification
+        watcher.onTransition = { sessionId, session, from in
+            Task { @MainActor in
+                notifier.notifyIfNeeded(sessionId: sessionId, session: session)
+            }
+        }
+
+        // Start polling and request permission immediately — not on first UI open
+        watcher.start()
+        notifier.requestPermission()
+
+        _stateWatcher = StateObject(wrappedValue: watcher)
+        _notificationManager = StateObject(wrappedValue: notifier)
+    }
 
     var body: some Scene {
         MenuBarExtra {
             MenuBarView(stateWatcher: stateWatcher)
-                .onAppear {
-                    setupNotificationBridge()
-                    stateWatcher.start()
-                    notificationManager.requestPermission()
-                }
         } label: {
             MenuBarLabel(attentionCount: stateWatcher.attentionCount)
         }
         .menuBarExtraStyle(.window)
-    }
-
-    private func setupNotificationBridge() {
-        stateWatcher.onTransition = { [weak notificationManager] sessionId, session, from in
-            Task { @MainActor in
-                notificationManager?.notifyIfNeeded(sessionId: sessionId, session: session)
-            }
-        }
     }
 }
 
