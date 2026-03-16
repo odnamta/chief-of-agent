@@ -24,6 +24,39 @@ Agent attention manager for Claude Code CLI.
 - Test files: `src/__tests__/*.test.ts`
 - Run single test: `npx vitest run src/__tests__/parser.test.ts`
 
+## Phase 3 — Control Tower Web Dashboard
+
+Next.js dashboard in `dashboard/` directory. Runs on port 3400.
+
+### Commands
+- `cd dashboard && npm run dev` — start dev server on :3400
+- `cd dashboard && npm run build` — production build
+- `cd dashboard && npm start` — start production server on :3400
+
+### Architecture
+- `dashboard/src/app/page.tsx` — Main dashboard page (SSE + session polling)
+- `dashboard/src/app/api/pending/route.ts` — POST creates pending request (long-poll), GET lists all
+- `dashboard/src/app/api/respond/route.ts` — POST resolves pending with allow/deny/ask
+- `dashboard/src/app/api/events/route.ts` — GET SSE stream for real-time updates
+- `dashboard/src/app/api/sessions/route.ts` — GET reads ~/.chief-of-agent/state.json
+- `dashboard/src/lib/pending-store.ts` — In-memory Map of Promises (globalThis-safe for HMR)
+- `dashboard/src/components/Header.tsx` — Top bar with agent/pending counts
+- `dashboard/src/components/PendingCard.tsx` — Pending request card with Approve/Deny/Terminal
+- `dashboard/src/components/AgentGrid.tsx` — 2-column agent session grid
+
+### Setup with Dashboard (opt-in)
+```bash
+chief-of-agent setup --dashboard
+```
+Adds PreToolUse hook (matcher: Bash|Edit|Write) that runs `chief-of-agent respond`.
+Regular `chief-of-agent setup` does NOT install the PreToolUse hook.
+
+### Key Notes
+- Pending store uses `globalThis` to survive Next.js HMR reloads
+- Long-poll timeout: 120s → falls back to `permissionDecision: "ask"`
+- Dashboard not running → immediate `ask` fallback (connection refused catch)
+- SSE heartbeat every 25s to keep connection alive through proxies
+
 ## Phase 2 — macOS Menu Bar App
 
 Native Swift/SwiftUI app in `macos/` directory.

@@ -7,6 +7,27 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.2.0] - 2026-03-16
+
+### Added — Phase 3: Control Tower
+
+- **`dashboard/`** — Next.js 14 web app on port 3400 (dark theme, Tailwind CSS)
+- **Pending store** — In-memory Map of Promises using `globalThis` for HMR safety
+- **`POST /api/pending`** — CLI long-polls until user responds or 120s timeout
+- **`GET /api/pending`** — Returns all current pending requests
+- **`POST /api/respond`** — Resolves a pending request with allow/deny/ask
+- **`GET /api/events`** — SSE stream for real-time pending:new and pending:resolved events
+- **`GET /api/sessions`** — Reads `~/.chief-of-agent/state.json` for agent grid
+- **`PendingCard` component** — Approve/Deny/Terminal buttons with live elapsed timer
+- **`AgentGrid` component** — 2-column grid of all agent sessions with status dots
+- **`Header` component** — Top bar with agent count and pending count indicator
+- **`chief-of-agent respond`** — New CLI command: reads PreToolUse hook stdin, POSTs to dashboard, awaits decision, outputs `permissionDecision` JSON
+- **`chief-of-agent setup --dashboard`** — Opt-in flag that installs PreToolUse hook (matcher: Bash|Edit|Write). Regular `setup` unchanged.
+- **`generateDashboardHookConfig()`** and **`installDashboardHook()`** in `setup.ts`
+- **15 new Phase 3 tests** — dashboard hook config, mergeHooks with PreToolUse, extractDetail logic, output format verification
+
+---
+
 ## [0.1.0] - 2026-03-15
 
 Initial release.

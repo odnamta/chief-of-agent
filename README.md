@@ -153,10 +153,67 @@ swift build -c release  # release build
 
 ---
 
-## Roadmap
+## Control Tower (Phase 3)
 
-**Phase 3 — Web Control Tower**
-A local web UI where you can see all sessions, read full context, and respond to agents directly from your browser.
+A local web dashboard on `localhost:3400` where you can approve or deny Claude Code permission requests from the browser — without switching tabs.
+
+### How it works
+
+`PreToolUse` fires before every Bash, Edit, or Write call. The hook runs `chief-of-agent respond`, which POSTs to the dashboard and long-polls for your decision. When you click Approve or Deny, the decision flows back to Claude Code via the `permissionDecision` field. The whole round-trip is under 1 second.
+
+If the dashboard isn't running, or you don't respond within 120 seconds, the hook returns `ask` — Claude Code falls back to the normal terminal permission prompt. No blocking, no degradation.
+
+### Setup
+
+```bash
+# Start the dashboard
+cd dashboard
+npm install
+npm run dev   # or npm start for production
+
+# Install the PreToolUse hook (one-time, opt-in)
+chief-of-agent setup --dashboard
+```
+
+### Dashboard UI
+
+```
+┌─────────────────────────────────────────────┐
+│ Chief of Agent — Control Tower   5 active · 2 pending │
+├─────────────────────────────────────────────┤
+│ PENDING ACTIONS                              │
+│  secbot · Bash · 30s                         │
+│  ┌──────────────────────────────────────┐   │
+│  │ git push origin main                 │   │
+│  └──────────────────────────────────────┘   │
+│          [Approve]  [Deny]  [Terminal]       │
+├─────────────────────────────────────────────┤
+│ ALL AGENTS (2-column grid)                   │
+│  🟢 gis-erp   🟢 cekatan   🔴 website      │
+└─────────────────────────────────────────────┘
+```
+
+- **Approve** — sends `allow` back to Claude Code (green)
+- **Deny** — sends `deny` with a system message (gray)
+- **Terminal** — sends `ask`, falls back to the terminal prompt (outline)
+- Live elapsed timer on each pending card
+- Agent grid polls every 2 seconds for status updates
+- SSE for instant pending request notifications
+
+### Architecture
+
+The response pipeline uses an in-memory Map of Promises in the Next.js server:
+
+1. `chief-of-agent respond` POSTs request → Next.js creates a Promise, awaits it (long-poll)
+2. Dashboard receives via SSE → shows pending card
+3. User clicks Approve → dashboard POSTs to `/api/respond` → Promise resolves
+4. Long-poll returns `{ decision: "allow" }` to CLI
+5. CLI writes `{ "hookSpecificOutput": { "permissionDecision": "allow" } }` to stdout
+6. Claude Code reads output → permission granted
+
+---
+
+## Roadmap
 
 **Phase 4 — Auto-Approval Engine**
 An AI-powered policy layer. Define rules like "auto-approve git commands in read-only repos" and let the engine handle routine approvals without interrupting you.

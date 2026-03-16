@@ -4,7 +4,7 @@ import os from 'node:os';
 
 interface HookEntry {
   matcher: string;
-  hooks: Array<{ type: string; command: string; async?: boolean }>;
+  hooks: Array<{ type: string; command: string; async?: boolean; timeout?: number }>;
 }
 type HooksConfig = Record<string, HookEntry[]>;
 
@@ -55,4 +55,38 @@ export function ensureConfigDir(): string {
   const configDir = path.join(os.homedir(), '.chief-of-agent');
   if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
   return configDir;
+}
+
+/**
+ * Generates the PreToolUse hook config for Control Tower permission routing.
+ * Only called when user runs `chief-of-agent setup --dashboard`.
+ */
+export function generateDashboardHookConfig(): HooksConfig {
+  return {
+    PreToolUse: [
+      {
+        matcher: 'Bash|Edit|Write',
+        hooks: [{ type: 'command', command: 'chief-of-agent respond', timeout: 120 }],
+      },
+    ],
+  };
+}
+
+/**
+ * Installs the PreToolUse hook for the Control Tower dashboard.
+ * Additive — does not remove existing hooks.
+ */
+export function installDashboardHook(): { settingsPath: string } {
+  const claudeDir = path.join(os.homedir(), '.claude');
+  const settingsPath = path.join(claudeDir, 'settings.json');
+  if (!fs.existsSync(claudeDir)) fs.mkdirSync(claudeDir, { recursive: true });
+
+  let existing: Record<string, unknown> = {};
+  if (fs.existsSync(settingsPath)) {
+    existing = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+  }
+
+  const result = mergeHooks(existing, generateDashboardHookConfig());
+  fs.writeFileSync(settingsPath, JSON.stringify(result, null, 2));
+  return { settingsPath };
 }
