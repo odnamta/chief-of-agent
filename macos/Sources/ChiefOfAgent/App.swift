@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 import ChiefOfAgentCore
 
 @main
@@ -9,10 +10,23 @@ struct ChiefOfAgentApp: App {
     var body: some Scene {
         MenuBarExtra {
             MenuBarView(stateWatcher: stateWatcher)
+                .onAppear {
+                    setupNotificationBridge()
+                    stateWatcher.start()
+                    notificationManager.requestPermission()
+                }
         } label: {
             MenuBarLabel(attentionCount: stateWatcher.attentionCount)
         }
         .menuBarExtraStyle(.window)
+    }
+
+    private func setupNotificationBridge() {
+        stateWatcher.onTransition = { [weak notificationManager] sessionId, session, from in
+            Task { @MainActor in
+                notificationManager?.notifyIfNeeded(sessionId: sessionId, session: session)
+            }
+        }
     }
 }
 
