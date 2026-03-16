@@ -46,7 +46,9 @@ export class NotificationDispatcher {
   }
 
   dispatch(event: HookEvent): void {
-    if (event.eventType === 'session_start' || event.eventType === 'session_end') return;
+    // Only notify for events that need attention — not routine tool calls
+    const attentionEvents: EventType[] = ['permission', 'idle', 'error'];
+    if (!attentionEvents.includes(event.eventType)) return;
     if (this.isOnCooldown(event.sessionId)) return;
     this.saveCooldown(event.sessionId);
 
