@@ -1,9 +1,10 @@
 /**
  * GET /api/events — Server-Sent Events stream.
- * Broadcasts pending:new and pending:resolved events to all connected dashboards.
+ * Broadcasts pending:new, pending:resolved, and auto-decision events to all connected dashboards.
  */
 import { NextResponse } from 'next/server';
 import { addSSEClient, getAllPending } from '@/lib/pending-store';
+import { addAutoDecisionClient, getAutoDecisionFeed } from '@/lib/auto-decision-store';
 
 export const runtime = 'nodejs';
 // Keep connection open indefinitely
@@ -14,12 +15,21 @@ export async function GET() {
 
   const stream = new ReadableStream({
     start(controller) {
-      // Send initial ping + current pending state on connect
-      const ping = `event: connected\ndata: ${JSON.stringify({ pending: getAllPending() })}\n\n`;
+      // Send initial ping + current pending state + recent auto-decisions on connect
+      const ping = `event: connected\ndata: ${JSON.stringify({
+        pending: getAllPending(),
+        autoDecisions: getAutoDecisionFeed().slice(-20), // last 20
+      })}\n\n`;
       controller.enqueue(encoder.encode(ping));
 
-      // Register this client as an SSE subscriber
-      const remove = addSSEClient((event: string, data: string) => {
+      // Register for pending events
+      const removePending = addSSEClient((event: string, data: string) => {
+        const message = `event: ${event}\ndata: ${data}\n\n`;
+        controller.enqueue(encoder.encode(message));
+      });
+
+      // Register for auto-decision events
+      const removeAutoDecision = addAutoDecisionClient((event: string, data: string) => {
         const message = `event: ${event}\ndata: ${data}\n\n`;
         controller.enqueue(encoder.encode(message));
       });
@@ -30,19 +40,20 @@ export async function GET() {
           controller.enqueue(encoder.encode(': heartbeat\n\n'));
         } catch {
           clearInterval(heartbeat);
-          remove();
+          removePending();
+          removeAutoDecision();
         }
       }, 25_000);
 
       // Clean up when client disconnects
-      // ReadableStream cancel is called when the consumer closes
       return () => {
         clearInterval(heartbeat);
-        remove();
+        removePending();
+        removeAutoDecision();
       };
     },
     cancel() {
-      // Client disconnected — cleanup handled by the remove() callback above
+      // Client disconnected — cleanup handled by the remove() callbacks above
     },
   });
 

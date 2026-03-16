@@ -4,12 +4,15 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Header from '@/components/Header';
 import PendingCard from '@/components/PendingCard';
 import AgentGrid from '@/components/AgentGrid';
+import AutoDecisionFeed from '@/components/AutoDecisionFeed';
 import type { Decision, PendingRequest, SessionState, StateFile } from '@/lib/types';
+import type { AutoDecisionPayload } from '@/app/api/auto-decision/route';
 
 export default function ControlTower() {
   const [pending, setPending] = useState<PendingRequest[]>([]);
   const [sessions, setSessions] = useState<Record<string, SessionState>>({});
   const [connected, setConnected] = useState(false);
+  const [autoDecisions, setAutoDecisions] = useState<AutoDecisionPayload[]>([]);
   const esRef = useRef<EventSource | null>(null);
 
   // Fetch sessions on mount and poll every 2 seconds
@@ -31,15 +34,19 @@ export default function ControlTower() {
     return () => clearInterval(poll);
   }, [fetchSessions]);
 
-  // Connect SSE for real-time pending updates
+  // Connect SSE for real-time pending + auto-decision updates
   useEffect(() => {
     function connect() {
       const es = new EventSource('/api/events');
       esRef.current = es;
 
       es.addEventListener('connected', (e) => {
-        const data = JSON.parse(e.data) as { pending: PendingRequest[] };
+        const data = JSON.parse(e.data) as {
+          pending: PendingRequest[];
+          autoDecisions?: AutoDecisionPayload[];
+        };
         setPending(data.pending || []);
+        setAutoDecisions(data.autoDecisions || []);
         setConnected(true);
       });
 
@@ -55,6 +62,15 @@ export default function ControlTower() {
       es.addEventListener('pending:resolved', (e) => {
         const { requestId } = JSON.parse(e.data) as { requestId: string; decision: Decision };
         setPending((prev) => prev.filter((p) => p.requestId !== requestId));
+      });
+
+      es.addEventListener('auto-decision', (e) => {
+        const decision = JSON.parse(e.data) as AutoDecisionPayload;
+        setAutoDecisions((prev) => {
+          const updated = [...prev, decision];
+          // Keep last 50
+          return updated.slice(-50);
+        });
       });
 
       es.onerror = () => {
@@ -129,6 +145,9 @@ export default function ControlTower() {
             </div>
           </section>
         )}
+
+        {/* Auto-Decisions feed */}
+        <AutoDecisionFeed decisions={autoDecisions} />
 
         {/* All Agents section */}
         <section>
