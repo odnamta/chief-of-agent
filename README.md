@@ -121,10 +121,39 @@ Each hook calls the `chief-of-agent` binary with the event type and the JSON pay
 
 ---
 
-## Roadmap
+## Menu Bar App (Phase 2)
 
-**Phase 2 — Menu Bar Widget**
-A native macOS menu bar icon with live status dots. One glance tells you how many agents are active, waiting, or errored.
+A native macOS menu bar app that gives you at-a-glance status for all Claude Code sessions.
+
+- **Menu bar icon** with red badge showing how many agents need attention
+- **Dropdown** with all active sessions — status dots, project names, time-ago, context
+- **Real notification banners** via macOS native UNUserNotificationCenter
+- **Click to jump** — click a session row or notification to bring Warp to foreground
+- **Quiet hours** — suppress notifications during configured hours
+- **Launch at login** — starts automatically with your Mac
+
+### Install
+
+```bash
+./scripts/install-macos.sh
+```
+
+This builds the Swift package, creates a proper `.app` bundle in `~/Applications/`, and reports success. First launch will ask for notification permission.
+
+**Requirements:** macOS 14+ (Sonoma), Swift 5.9+ (included with Xcode 15+)
+
+### Build from Source
+
+```bash
+cd macos
+swift build          # debug build
+swift test           # run unit tests (11 tests)
+swift build -c release  # release build
+```
+
+---
+
+## Roadmap
 
 **Phase 3 — Web Control Tower**
 A local web UI where you can see all sessions, read full context, and respond to agents directly from your browser.
