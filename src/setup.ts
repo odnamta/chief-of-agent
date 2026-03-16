@@ -14,6 +14,7 @@ export function generateHooksConfig(): HooksConfig {
       { matcher: 'permission_prompt', hooks: [{ type: 'command', command: 'chief-of-agent notify' }] },
       { matcher: 'idle_prompt', hooks: [{ type: 'command', command: 'chief-of-agent notify' }] },
     ],
+    PostToolUse: [{ matcher: '', hooks: [{ type: 'command', command: 'chief-of-agent notify', async: true }] }],
     PostToolUseFailure: [{ matcher: '', hooks: [{ type: 'command', command: 'chief-of-agent notify' }] }],
     Stop: [{ matcher: '', hooks: [{ type: 'command', command: 'chief-of-agent notify' }] }],
     SessionStart: [{ matcher: '', hooks: [{ type: 'command', command: 'chief-of-agent register', async: true }] }],

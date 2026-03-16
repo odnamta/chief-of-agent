@@ -92,6 +92,55 @@ public class StateWatcher: ObservableObject {
         attentionCount = newSessions.values.filter { $0.status.isAttentionNeeded }.count
     }
 
+    // MARK: - Stale Session Cleanup
+
+    private static let staleThreshold: TimeInterval = 30 * 60 // 30 minutes
+
+    /// Number of sessions with no event for 30+ minutes
+    public var staleCount: Int {
+        sessions.values.filter { isStale($0) }.count
+    }
+
+    public func isStale(_ session: SessionData) -> Bool {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let date = formatter.date(from: session.last_event_at) ?? {
+            let basic = ISO8601DateFormatter()
+            return basic.date(from: session.last_event_at)
+        }()
+        guard let eventDate = date else { return true }
+        return Date().timeIntervalSince(eventDate) > Self.staleThreshold
+    }
+
+    /// Remove stale sessions from state.json
+    public func removeStale() {
+        let staleIds = sessions.filter { isStale($0.value) }.map { $0.key }
+        guard !staleIds.isEmpty else { return }
+
+        // Read, filter, write back
+        let fm = FileManager.default
+        guard let data = fm.contents(atPath: stateFilePath),
+              var stateFile = try? JSONDecoder().decode(StateFile.self, from: data) else { return }
+
+        var mutableSessions = stateFile.sessions
+        for id in staleIds {
+            mutableSessions.removeValue(forKey: id)
+            previousStatuses.removeValue(forKey: id)
+        }
+
+        let updated = StateFile(sessions: mutableSessions)
+        if let newData = try? JSONEncoder().encode(updated) {
+            let tmpPath = stateFilePath + ".tmp"
+            try? newData.write(to: URL(fileURLWithPath: tmpPath))
+            try? fm.removeItem(atPath: stateFilePath)
+            try? fm.moveItem(atPath: tmpPath, toPath: stateFilePath)
+        }
+
+        // Force re-poll
+        lastModificationDate = nil
+        poll()
+    }
+
     // MARK: - Sorted Sessions
 
     /// Sessions sorted: attention-needed first, then by last_event_at descending

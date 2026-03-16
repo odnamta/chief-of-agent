@@ -108,6 +108,17 @@ struct MenuBarView: View {
 
             Spacer()
 
+            if stateWatcher.staleCount > 0 {
+                Button("Clean stale (\(stateWatcher.staleCount))") {
+                    stateWatcher.removeStale()
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 11))
+                .foregroundStyle(.orange)
+            }
+
+            Spacer()
+
             Button("Quit") {
                 NSApplication.shared.terminate(nil)
             }
