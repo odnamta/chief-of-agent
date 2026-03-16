@@ -4,12 +4,18 @@ import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import readline from 'node:readline';
 import { readStdin } from './stdin.js';
 import { parseHookInput } from './parser.js';
 import { StateManager } from './state.js';
 import { ConfigManager } from './config.js';
 import { NotificationDispatcher } from './notify.js';
 import { installHooks, installDashboardHook, ensureConfigDir } from './setup.js';
+import { loadPolicies, matchRule } from './rules.js';
+import { classifyWithAI } from './ai-classifier.js';
+import { logAudit, readAudit, suggestRules } from './audit.js';
+import { ensurePoliciesFile, writePolicies } from './policies.js';
+import type { AuditEntry } from './audit.js';
 
 const CONFIG_DIR = path.join(os.homedir(), '.chief-of-agent');
 const stateManager = new StateManager(CONFIG_DIR);
@@ -118,12 +124,30 @@ program
   .command('setup')
   .description('Install hooks into ~/.claude/settings.json')
   .option('--dashboard', 'Also install PreToolUse hook for Control Tower permission routing')
-  .action((options: { dashboard?: boolean }) => {
+  .option('--auto', 'Create default policies.json with sensible rules')
+  .action((options: { dashboard?: boolean; auto?: boolean }) => {
     const configDir = ensureConfigDir();
     const { settingsPath, created } = installHooks();
 
     if (options.dashboard) {
       installDashboardHook();
+    }
+
+    if (options.auto) {
+      const policiesPath = ensurePoliciesFile();
+      console.log('\n  Chief of Agent — Setup Complete\n');
+      console.log(`  Hooks: ${created ? 'created' : 'merged into'} ${settingsPath}`);
+      if (options.dashboard) {
+        console.log('  Dashboard hook: PreToolUse (Bash|Edit|Write) → localhost:3400');
+      }
+      console.log(`  Config: ${path.join(configDir, 'config.json')}`);
+      console.log(`  Policies: ${policiesPath} (default rules installed)`);
+      if (options.dashboard) {
+        console.log('\n  Control Tower + Smart Auto-Responder enabled.');
+        console.log('  Start the dashboard: cd dashboard && npm run dev');
+      }
+      console.log('\n  You\'re all set. Start Claude Code sessions and get notified!\n');
+      return;
     }
 
     const cfgPath = path.join(configDir, 'config.json');
@@ -177,7 +201,7 @@ configCmd.action(() => {
 
 program
   .command('respond')
-  .description('Handle PreToolUse hook — long-polls dashboard for approve/deny/ask decision (reads stdin)')
+  .description('Handle PreToolUse hook — three-tier auto-responder (reads stdin)')
   .action(async () => {
     let raw: Record<string, unknown>;
     try {
@@ -189,47 +213,287 @@ program
       process.exit(0);
     }
 
+    const startTime = Date.now();
     const requestId = randomUUID();
     const cwd = (raw.cwd as string) || '/unknown';
     const project = cwd.split('/').filter(Boolean).pop() || 'unknown';
+    const tool = String(raw.tool_name || 'Unknown');
+    const detail = extractDetail(raw);
+    const sessionId = String(raw.session_id || 'unknown');
 
-    try {
-      const body = JSON.stringify({
-        requestId,
-        sessionId: raw.session_id || 'unknown',
+    const auditContext = {
+      sessionId,
+      project,
+      tool,
+      detail,
+    };
+
+    // ─────────────────────────────────────────────
+    // Tier 1: Rules Engine
+    // ─────────────────────────────────────────────
+    const policies = loadPolicies();
+    const ruleResult = matchRule(policies, project, tool, detail);
+    if (ruleResult) {
+      const latency = Date.now() - startTime;
+      logAudit({
+        timestamp: new Date().toISOString(),
+        ...auditContext,
+        decision: ruleResult.action,
+        tier: 'rule',
+        rule: ruleResult.pattern,
+        latency_ms: latency,
+      });
+      broadcastAutoDecision({
         project,
-        tool: raw.tool_name || 'Unknown',
-        detail: extractDetail(raw),
+        tool,
+        detail,
+        decision: ruleResult.action,
+        tier: 'rule',
+        rule: ruleResult.pattern,
+        latency_ms: latency,
         timestamp: new Date().toISOString(),
       });
+      outputDecision(ruleResult.action);
+    }
 
-      const response = await fetch('http://localhost:3400/api/pending', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body,
-        signal: AbortSignal.timeout(120_000),
+    // ─────────────────────────────────────────────
+    // Tier 2: AI Classifier
+    // ─────────────────────────────────────────────
+    if (policies.ai?.enabled && process.env.ANTHROPIC_API_KEY) {
+      const threshold = policies.ai.confidence_threshold ?? 0.8;
+      const aiResult = await classifyWithAI(project, tool, detail);
+      if (
+        aiResult &&
+        aiResult.confidence >= threshold &&
+        (aiResult.decision === 'allow' || aiResult.decision === 'deny')
+      ) {
+        const latency = Date.now() - startTime;
+        logAudit({
+          timestamp: new Date().toISOString(),
+          ...auditContext,
+          decision: aiResult.decision,
+          tier: 'ai',
+          confidence: aiResult.confidence,
+          reason: aiResult.reason,
+          latency_ms: latency,
+        });
+        broadcastAutoDecision({
+          project,
+          tool,
+          detail,
+          decision: aiResult.decision,
+          tier: 'ai',
+          confidence: aiResult.confidence,
+          reason: aiResult.reason,
+          latency_ms: latency,
+          timestamp: new Date().toISOString(),
+        });
+        outputDecision(aiResult.decision);
+      }
+      // AI said "ask" or confidence too low — fall through to dashboard
+    }
+
+    // ─────────────────────────────────────────────
+    // Tier 3: Dashboard (Phase 3 long-poll)
+    // ─────────────────────────────────────────────
+    await handleDashboardTier(raw, requestId, project, tool, detail, sessionId, auditContext, startTime);
+  });
+
+/**
+ * Outputs a decision and exits. Used by tiers 1 and 2.
+ */
+function outputDecision(decision: 'allow' | 'deny'): never {
+  const output: Record<string, unknown> = {
+    hookSpecificOutput: { permissionDecision: decision },
+  };
+  if (decision === 'deny') {
+    output.systemMessage = 'Action denied by Chief of Agent auto-responder';
+  }
+  process.stdout.write(JSON.stringify(output));
+  process.exit(0);
+}
+
+/**
+ * Tier 3: Long-polls the dashboard for a human decision.
+ */
+async function handleDashboardTier(
+  raw: Record<string, unknown>,
+  requestId: string,
+  project: string,
+  tool: string,
+  detail: string,
+  sessionId: string,
+  auditContext: { sessionId: string; project: string; tool: string; detail: string },
+  startTime: number,
+): Promise<never> {
+  try {
+    const body = JSON.stringify({
+      requestId,
+      sessionId,
+      project,
+      tool,
+      detail,
+      timestamp: new Date().toISOString(),
+    });
+
+    const response = await fetch('http://localhost:3400/api/pending', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      signal: AbortSignal.timeout(120_000),
+    });
+
+    const result = await response.json() as { decision?: string };
+    const decision = result.decision;
+
+    if (decision === 'allow' || decision === 'deny') {
+      const latency = Date.now() - startTime;
+      logAudit({
+        timestamp: new Date().toISOString(),
+        ...auditContext,
+        decision,
+        tier: 'dashboard',
+        latency_ms: latency,
       });
 
-      const result = await response.json() as { decision?: string };
-      const decision = result.decision;
-
-      if (decision === 'allow' || decision === 'deny') {
-        const output: Record<string, unknown> = {
-          hookSpecificOutput: { permissionDecision: decision },
-        };
-        if (decision === 'deny') {
-          output.systemMessage = 'User denied this action via Control Tower dashboard';
-        }
-        process.stdout.write(JSON.stringify(output));
+      const output: Record<string, unknown> = {
+        hookSpecificOutput: { permissionDecision: decision },
+      };
+      if (decision === 'deny') {
+        output.systemMessage = 'User denied this action via Control Tower dashboard';
       }
-      // "ask" or unknown → no output, falls through to terminal
-    } catch {
-      // Dashboard not running, timeout, connection reset, etc.
-      // Return "ask" so Claude Code falls back to terminal prompt
-      process.stdout.write(JSON.stringify({ hookSpecificOutput: { permissionDecision: 'ask' } }));
+      process.stdout.write(JSON.stringify(output));
     }
-    process.exit(0);
+    // "ask" or unknown → no output, falls through to terminal
+  } catch {
+    // Dashboard not running, timeout, etc. → ask
+    process.stdout.write(JSON.stringify({ hookSpecificOutput: { permissionDecision: 'ask' } }));
+  }
+  process.exit(0);
+}
+
+// ─────────────────────────────────────────────
+// audit command
+// ─────────────────────────────────────────────
+
+program
+  .command('audit')
+  .description('Show recent auto-decisions from the audit log')
+  .option('--tail', 'Live tail the audit log (not yet implemented, shows last 50)')
+  .option('--stats', 'Show summary statistics')
+  .option('-n, --limit <number>', 'Number of entries to show (default: 20)', '20')
+  .action((options: { tail?: boolean; stats?: boolean; limit?: string }) => {
+    const limit = parseInt(options.limit || '20', 10);
+    const entries = readAudit(options.tail ? 50 : limit);
+
+    if (entries.length === 0) {
+      console.log('\n  No audit entries found. Run some Claude Code sessions first.\n');
+      return;
+    }
+
+    if (options.stats) {
+      printAuditStats(entries);
+      return;
+    }
+
+    console.log(`\n  Chief of Agent — Audit Log (last ${entries.length})\n`);
+
+    const tierLabel: Record<string, string> = {
+      rule: 'Rule',
+      ai: 'AI  ',
+      dashboard: 'Human',
+    };
+
+    for (const entry of entries) {
+      const decisionIcon = entry.decision === 'allow' ? '[ALLOW]' : entry.decision === 'deny' ? '[DENY] ' : '[ASK]  ';
+      const tier = tierLabel[entry.tier] || entry.tier;
+      const ts = new Date(entry.timestamp).toLocaleTimeString();
+      const latency = entry.latency_ms < 1000 ? `${entry.latency_ms}ms` : `${(entry.latency_ms / 1000).toFixed(1)}s`;
+      console.log(`  ${decisionIcon} ${tier} | ${entry.project.padEnd(15)} ${entry.tool.padEnd(6)} | ${latency.padStart(6)} | ${ts}`);
+      console.log(`         ${entry.detail.slice(0, 80)}`);
+      if (entry.rule) console.log(`         Rule: ${entry.rule}`);
+      if (entry.reason) console.log(`         AI: ${entry.reason} (${(entry.confidence! * 100).toFixed(0)}%)`);
+    }
+    console.log('');
   });
+
+function printAuditStats(entries: AuditEntry[]): void {
+  const total = entries.length;
+  const byTier = { rule: 0, ai: 0, dashboard: 0 };
+  const byDecision = { allow: 0, deny: 0, ask: 0 };
+
+  for (const e of entries) {
+    byTier[e.tier] = (byTier[e.tier] || 0) + 1;
+    byDecision[e.decision] = (byDecision[e.decision] || 0) + 1;
+  }
+
+  const autoRate = ((byTier.rule + byTier.ai) / total * 100).toFixed(1);
+
+  console.log(`\n  Audit Statistics (${total} decisions)\n`);
+  console.log(`  Automation rate: ${autoRate}%`);
+  console.log(`  By tier:   Rule=${byTier.rule}  AI=${byTier.ai}  Human=${byTier.dashboard}`);
+  console.log(`  By result: Allow=${byDecision.allow}  Deny=${byDecision.deny}  Ask=${byDecision.ask}`);
+  console.log('');
+}
+
+// ─────────────────────────────────────────────
+// suggest command
+// ─────────────────────────────────────────────
+
+program
+  .command('suggest')
+  .description('Analyze audit log and suggest new rules')
+  .action(async () => {
+    const allEntries = readAudit(10000);
+
+    if (allEntries.length < 10) {
+      console.log(`\n  Not enough data yet (${allEntries.length} entries, need 10+). Run more Claude Code sessions.\n`);
+      return;
+    }
+
+    const suggestions = suggestRules(allEntries);
+
+    if (suggestions.length === 0) {
+      console.log('\n  No clear patterns found yet. More sessions needed.\n');
+      return;
+    }
+
+    console.log(`\n  Suggested Rules (based on ${allEntries.length} decisions)\n`);
+
+    const toApply: Array<{ tool: string; pattern: string; action: 'allow' | 'deny' }> = [];
+
+    for (const s of suggestions) {
+      const total = s.approvalCount + s.denialCount;
+      if (s.consistent) {
+        const icon = s.action === 'allow' ? '[+]' : '[!]';
+        console.log(`  ${icon} You ${s.action === 'allow' ? 'approved' : 'denied'} "${s.tool}: ${s.pattern}" ${total} times (0 conflicts)`);
+        console.log(`     Suggested: { "tool": "${s.tool}", "pattern": "${s.pattern}", "action": "${s.action}" }\n`);
+        toApply.push({ tool: s.tool, pattern: s.pattern, action: s.action });
+      } else {
+        console.log(`  [~] Mixed results for "${s.tool}: ${s.pattern}" (allow=${s.approvalCount}, deny=${s.denialCount})`);
+        console.log(`     No suggestion — inconsistent pattern, keep manual\n`);
+      }
+    }
+
+    if (toApply.length === 0) {
+      console.log('  No consistent patterns to add.\n');
+      return;
+    }
+
+    const answer = await promptUser(`  Apply ${toApply.length} suggestion(s) to policies.json? (y/n) `);
+    if (answer.trim().toLowerCase() === 'y') {
+      const policies = loadPolicies();
+      policies.rules.push(...toApply);
+      writePolicies(policies);
+      console.log(`\n  Added ${toApply.length} rule(s) to policies.json.\n`);
+    } else {
+      console.log('\n  No changes made.\n');
+    }
+  });
+
+// ─────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────
 
 /**
  * Extracts a human-readable detail string from PreToolUse hook input.
@@ -250,6 +514,33 @@ function timeSince(date: Date): string {
   if (minutes < 60) return `${minutes}m ago`;
   const hours = Math.floor(minutes / 60);
   return `${hours}h ago`;
+}
+
+/**
+ * Broadcasts an auto-decision to the dashboard (fire-and-forget, 2s timeout).
+ */
+function broadcastAutoDecision(payload: Record<string, unknown>): void {
+  fetch('http://localhost:3400/api/auto-decision', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(2_000),
+  }).catch(() => {
+    // Dashboard not running — silently ignore
+  });
+}
+
+/**
+ * Prompts user for input via readline.
+ */
+function promptUser(question: string): Promise<string> {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer);
+    });
+  });
 }
 
 program.parse();
