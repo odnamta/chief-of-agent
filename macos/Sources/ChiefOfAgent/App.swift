@@ -28,11 +28,17 @@ struct ChiefOfAgentApp: App {
         MenuBarExtra {
             MenuBarView(stateWatcher: stateWatcher)
         } label: {
-            let count = stateWatcher.attentionCount
-            Label(
-                count > 0 ? "\(count)" : "",
-                systemImage: count > 0 ? "exclamationmark.circle.fill" : "cpu"
-            )
+            let pendingCount = stateWatcher.pendingRequests.count
+            let attentionCount = stateWatcher.attentionCount
+            if pendingCount > 0 {
+                // Pending actions trump everything — use orange triangle
+                Label("\(pendingCount)", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+            } else if attentionCount > 0 {
+                Label("\(attentionCount)", systemImage: "exclamationmark.circle.fill")
+            } else {
+                Label("", systemImage: "cpu")
+            }
         }
         .menuBarExtraStyle(.window)
     }

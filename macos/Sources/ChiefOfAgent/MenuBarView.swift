@@ -12,6 +12,12 @@ struct MenuBarView: View {
 
             Divider()
 
+            // Pending actions (destructive, awaiting approval) — shown at top
+            if !stateWatcher.pendingRequests.isEmpty {
+                pendingSection
+                Divider()
+            }
+
             // Session list
             if stateWatcher.sessions.isEmpty {
                 emptyState
@@ -37,6 +43,17 @@ struct MenuBarView: View {
 
             Spacer()
 
+            // Show pending badge if any
+            let pendingCount = stateWatcher.pendingRequests.count
+            if pendingCount > 0 {
+                Text("\(pendingCount) PENDING")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.orange, in: Capsule())
+            }
+
             let count = stateWatcher.sessions.count
             Text("\(count) SESSION\(count == 1 ? "" : "S")")
                 .font(.system(size: 11, weight: .medium, design: .monospaced))
@@ -44,6 +61,43 @@ struct MenuBarView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
+    }
+
+    // MARK: - Pending Actions Section
+
+    private var pendingSection: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.orange)
+                Text("PENDING APPROVAL")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.orange)
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
+
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(stateWatcher.pendingRequests) { request in
+                        PendingActionView(
+                            request: request,
+                            onApprove: {
+                                stateWatcher.respondToPending(requestId: request.requestId, decision: "allow")
+                            },
+                            onDeny: {
+                                stateWatcher.respondToPending(requestId: request.requestId, decision: "deny")
+                            }
+                        )
+                    }
+                }
+                .padding(.bottom, 4)
+            }
+            .frame(maxHeight: 280)
+        }
     }
 
     // MARK: - Empty State
