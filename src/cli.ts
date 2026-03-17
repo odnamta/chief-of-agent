@@ -15,6 +15,7 @@ import { loadPolicies, matchRule } from './rules.js';
 import { classifyWithAI } from './ai-classifier.js';
 import { logAudit, readAudit, suggestRules } from './audit.js';
 import { ensurePoliciesFile, writePolicies } from './policies.js';
+import { writePendingRequest, removePendingRequest, pollForResponse } from './pending.js';
 import type { AuditEntry } from './audit.js';
 
 const CONFIG_DIR = path.join(os.homedir(), '.chief-of-agent');
@@ -287,26 +288,70 @@ program
     const policies = loadPolicies();
     const ruleResult = matchRule(policies, project, tool, detail);
     if (ruleResult) {
-      const latency = Date.now() - startTime;
-      logAudit({
-        timestamp: new Date().toISOString(),
-        ...auditContext,
-        decision: ruleResult.action,
-        tier: 'rule',
-        rule: ruleResult.pattern,
-        latency_ms: latency,
-      });
-      broadcastAutoDecision({
-        project,
-        tool,
-        detail,
-        decision: ruleResult.action,
-        tier: 'rule',
-        rule: ruleResult.pattern,
-        latency_ms: latency,
-        timestamp: new Date().toISOString(),
-      });
-      outputDecision(ruleResult.action);
+      if (ruleResult.action === 'allow') {
+        // Allow rules fire immediately — no interruption
+        const latency = Date.now() - startTime;
+        logAudit({
+          timestamp: new Date().toISOString(),
+          ...auditContext,
+          decision: 'allow',
+          tier: 'rule',
+          rule: ruleResult.pattern,
+          latency_ms: latency,
+        });
+        broadcastAutoDecision({
+          project,
+          tool,
+          detail,
+          decision: 'allow',
+          tier: 'rule',
+          rule: ruleResult.pattern,
+          latency_ms: latency,
+          timestamp: new Date().toISOString(),
+        });
+        outputDecision('allow');
+      } else {
+        // Deny rules: write to pending.json and wait for menu bar response.
+        // If the user approves (overrides) or times out → fall through to ask.
+        writePendingRequest(requestId, {
+          sessionId,
+          project,
+          tool,
+          detail,
+          timestamp: new Date().toISOString(),
+          rule: ruleResult.pattern,
+        });
+
+        const decision = await pollForResponse(requestId);
+        removePendingRequest(requestId);
+
+        const latency = Date.now() - startTime;
+
+        if (decision === 'allow' || decision === 'deny') {
+          logAudit({
+            timestamp: new Date().toISOString(),
+            ...auditContext,
+            decision,
+            tier: 'rule',
+            rule: ruleResult.pattern,
+            latency_ms: latency,
+          });
+          broadcastAutoDecision({
+            project,
+            tool,
+            detail,
+            decision,
+            tier: 'rule',
+            rule: ruleResult.pattern,
+            latency_ms: latency,
+            timestamp: new Date().toISOString(),
+          });
+          outputDecision(decision);
+        }
+        // decision === 'ask' → fall through to terminal
+        process.stdout.write(JSON.stringify({ hookSpecificOutput: { permissionDecision: 'ask' } }));
+        process.exit(0);
+      }
     }
 
     // ─────────────────────────────────────────────

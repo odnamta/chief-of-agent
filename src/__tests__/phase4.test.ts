@@ -190,15 +190,18 @@ describe('getDefaultPolicies', () => {
     expect(policies.rules.some((r) => r.action === 'deny')).toBe(true);
   });
 
-  it('has AI enabled with confidence_threshold 0.8', () => {
+  it('has AI disabled by default (opt-in) with confidence_threshold 0.8', () => {
     const policies = getDefaultPolicies();
-    expect(policies.ai?.enabled).toBe(true);
+    // AI is disabled by default — users must opt in by setting ANTHROPIC_API_KEY
+    // and changing enabled to true in policies.json
+    expect(policies.ai?.enabled).toBe(false);
     expect(policies.ai?.confidence_threshold).toBe(0.8);
   });
 
-  it('includes rm -rf as deny', () => {
+  it('includes rm -rf pattern as deny (pattern uses regex escape)', () => {
     const policies = getDefaultPolicies();
-    const rmRule = policies.rules.find((r) => r.pattern === 'rm -rf');
+    // New pattern is regex-escaped: 'rm\\s+-rf'
+    const rmRule = policies.rules.find((r) => r.pattern.includes('rm') && r.action === 'deny');
     expect(rmRule).toBeDefined();
     expect(rmRule!.action).toBe('deny');
   });
