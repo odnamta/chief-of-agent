@@ -121,6 +121,59 @@ program
   });
 
 program
+  .command('scan')
+  .description('Discover and register running Claude Code sessions')
+  .action(async () => {
+    const { execFileSync } = await import('node:child_process');
+    try {
+      // Find running claude processes
+      const psOutput = execFileSync('ps', ['-eo', 'pid,tty,args']).toString();
+      const lines = psOutput.split('\n').filter(l => /\bclaude\b/.test(l) && !/grep|Claude\.app/.test(l));
+
+      let registered = 0;
+      const existing = await stateManager.getAll();
+
+      for (const line of lines) {
+        const match = line.trim().match(/^(\d+)\s+(\S+)\s+claude\s*(--resume\s+(\S+))?/);
+        if (!match) continue;
+
+        const pid = match[1];
+        const tty = match[2];
+        const resumeId = match[4];
+
+        // Get cwd from lsof
+        let cwd = '/Users/dioatmando/Vibecode';
+        try {
+          const lsofOut = execFileSync('lsof', ['-p', pid, '-Fn']).toString();
+          const cwdMatch = lsofOut.match(/fcwd\nn(.*)/);
+          if (cwdMatch) cwd = cwdMatch[1];
+        } catch { /* use default */ }
+
+        // Determine session ID — use resume ID or generate from pid+tty
+        const sessionId = resumeId || `scan-${pid}-${tty.replace(/\//g, '-')}`;
+
+        // Skip if already registered
+        if (existing[sessionId]) continue;
+
+        // Derive project from cwd
+        const project = cwd.split('/').filter(Boolean).pop() || 'unknown';
+
+        await stateManager.register(sessionId, cwd, project);
+        registered++;
+        console.log(`  Registered: ${project} [${sessionId.slice(0, 8)}] (${tty})`);
+      }
+
+      if (registered === 0) {
+        console.log('  No new sessions found. All running sessions are already registered.');
+      } else {
+        console.log(`\n  Registered ${registered} new session(s).`);
+      }
+    } catch (e) {
+      console.error('  Scan failed:', (e as Error).message);
+    }
+  });
+
+program
   .command('setup')
   .description('Install hooks into ~/.claude/settings.json')
   .option('--dashboard', 'Also install PreToolUse hook for Control Tower permission routing')
