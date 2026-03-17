@@ -122,6 +122,28 @@ program
   });
 
 program
+  .command('rename')
+  .description('Rename a session (match by short ID prefix)')
+  .argument('<id>', 'session ID prefix (e.g., first 4-8 chars from status)')
+  .argument('<name>', 'new project name')
+  .action(async (idPrefix: string, name: string) => {
+    const sessions = await stateManager.getAll();
+    const match = Object.keys(sessions).find(id => id.startsWith(idPrefix));
+    if (!match) {
+      console.log(`  No session found matching "${idPrefix}". Run: chief-of-agent status`);
+      return;
+    }
+    await stateManager.updateStatus(match, sessions[match].status, sessions[match].last_event);
+    // Direct state mutation for rename
+    const state = JSON.parse(fs.readFileSync(path.join(CONFIG_DIR, 'state.json'), 'utf-8'));
+    if (state.sessions[match]) {
+      state.sessions[match].project = name;
+      fs.writeFileSync(path.join(CONFIG_DIR, 'state.json'), JSON.stringify(state, null, 2));
+      console.log(`  Renamed [${match.slice(0, 8)}] → ${name}`);
+    }
+  });
+
+program
   .command('scan')
   .description('Discover and register running Claude Code sessions')
   .action(async () => {
