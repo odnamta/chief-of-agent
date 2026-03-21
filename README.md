@@ -1,234 +1,200 @@
 # Chief of Agent
 
-**Know which Claude Code agent needs you — without checking every tab.**
+**Agent governance for Claude Code — know what your AI agents are doing, control what they can do.**
 
+[![CI](https://github.com/odnamta/chief-of-agent/actions/workflows/test.yml/badge.svg)](https://github.com/odnamta/chief-of-agent/actions/workflows/test.yml)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![npm](https://img.shields.io/npm/v/chief-of-agent)](https://www.npmjs.com/package/chief-of-agent)
 
 ---
 
-## The Problem
+## What It Does
 
-You run 5–10 Claude Code CLI sessions in parallel Warp tabs — one for GIS-ERP, one for Cekatan, one for the migration script, one for the website. Each agent is mid-task. Some are waiting on your approval. Some hit an error ten minutes ago.
+You run multiple Claude Code sessions in parallel. Chief of Agent:
 
-You have no idea which tab needs you.
+1. **Monitors** all sessions — which are working, waiting, or errored
+2. **Enforces rules** — 34 default policies block destructive commands automatically
+3. **Approves/denies** — pending actions appear in your menu bar or web dashboard
+4. **Audits** — every decision is logged for review and pattern analysis
+5. **Summarizes** — AI-generated summaries show what each agent is doing
 
-So you click through every tab manually. You break your flow. You interrupt yourself to check agents that are fine, and you miss the one that's been stuck for eight minutes.
+Three interfaces: **macOS menu bar** + **web dashboard** + **CLI**.
 
----
-
-## The Solution
-
-Chief of Agent hooks directly into Claude Code's hook system. When an agent needs you, you know immediately — without switching tabs.
-
-- **macOS native notifications** pop up with the project name and what the agent is waiting on
-- **Sound alerts** distinguish between permission requests, errors, and completions
-- **`chief-of-agent status`** shows all sessions at a glance — who's working, who's waiting, who errored
+**Requirements:** macOS 14+ (Sonoma), Node.js 18+, Claude Code CLI
 
 ---
 
 ## Install
 
 ```bash
+# Install CLI
 npm install -g chief-of-agent
+
+# Install hooks (base: notifications + session tracking)
 chief-of-agent setup
-```
 
-That's it. The `setup` command merges the required hooks into your `~/.claude/settings.json`. Every Claude Code session you open from that point forward is tracked automatically.
+# Enable approve/deny + rules engine
+chief-of-agent setup --dashboard --auto
 
-**Requirements:** macOS, Node.js 18+, Claude Code CLI
+# OR: use HTTP hooks for ~5ms latency (requires menu bar app)
+chief-of-agent setup --http --auto
 
----
-
-## What Happens Automatically
-
-Once installed, Chief of Agent runs silently in the background via Claude Code hooks. You don't run anything manually.
-
-**Agent needs permission:**
-```
-Chief of Agent — GIS-ERP
-Needs approval: git push origin main
-```
-
-**Agent hits an error:**
-```
-Chief of Agent — Secbot
-Error: npm test — Process exited with code 1
-```
-
-**Agent finishes:**
-```
-Chief of Agent — Migration
-Task complete
-```
-
-Sound alerts fire on each event type. Sounds use macOS system sounds — no extra files to install.
-
----
-
-## `chief-of-agent status`
-
-Run this anytime to see the state of all active sessions:
-
-```
-  Chief of Agent — 5 active session(s)
-
-  🟢 gis-erp              working    2m ago     [abc12345]
-  🟡 secbot                waiting    30s ago    [def45678]
-     └─ Bash: rm -rf node_modules
-  🔴 website               error      1m ago     [ghi78901]
-     └─ Bash: npm test — Process exited with code 1
-  🟢 migration             working    5m ago     [jkl01234]
-  🟢 cekatan               working    3m ago     [mno56789]
-```
-
-Color codes: green = working, yellow = waiting for approval, red = errored.
-
----
-
-## Configuration
-
-```bash
-# View current config
-chief-of-agent config show
-
-# Adjust notification cooldown (default: 60s per session)
-chief-of-agent config set cooldown_seconds 30
-
-# Disable sounds
-chief-of-agent config set sound_enabled false
-
-# Set quiet hours (no notifications between 11pm and 7am)
-chief-of-agent config set quiet_hours '{"start":"23:00","end":"07:00"}'
-```
-
-Config is stored at `~/.chief-of-agent/config.json`. State is tracked at `~/.chief-of-agent/state.json`.
-
----
-
-## How It Works
-
-Claude Code exposes a hooks system in `~/.claude/settings.json`. Chief of Agent registers handlers for five hook types:
-
-| Hook | Fires when |
-|------|-----------|
-| `Notification` | Agent sends a notification (permission request, message) |
-| `Stop` | Agent session ends normally |
-| `PostToolUseFailure` | A tool call fails (bash error, file write failure, etc.) |
-| `SessionStart` | A new Claude Code session opens |
-| `SessionEnd` | A session closes |
-
-Each hook calls the `chief-of-agent` binary with the event type and the JSON payload from Claude Code's stdin. The binary updates session state atomically (with file locking) and fires the appropriate macOS notification and sound.
-
----
-
-## Menu Bar App (Phase 2)
-
-A native macOS menu bar app that gives you at-a-glance status for all Claude Code sessions.
-
-- **Menu bar icon** with red badge showing how many agents need attention
-- **Dropdown** with all active sessions — status dots, project names, time-ago, context
-- **Real notification banners** via macOS native UNUserNotificationCenter
-- **Click to jump** — click a session row or notification to bring Warp to foreground
-- **Quiet hours** — suppress notifications during configured hours
-- **Launch at login** — starts automatically with your Mac
-
-### Install
-
-```bash
+# Install macOS menu bar app
 ./scripts/install-macos.sh
 ```
 
-This builds the Swift package, creates a proper `.app` bundle in `~/Applications/`, and reports success. First launch will ask for notification permission.
+### Setup Modes
 
-**Requirements:** macOS 14+ (Sonoma), Swift 5.9+ (included with Xcode 15+)
+| Mode | What it does | Latency |
+|------|-------------|---------|
+| `setup` | Notifications + session tracking only | — |
+| `setup --dashboard` | + PreToolUse command hook → rules → dashboard | ~200ms |
+| `setup --http` | + PreToolUse HTTP hook → menu bar app directly | ~5ms |
+| `--auto` | Creates default policies.json with 34 rules | — |
 
-### Build from Source
+---
+
+## Menu Bar App
+
+Native SwiftUI app in your macOS menu bar.
+
+- **Status at a glance** — green/yellow/red dots for each session
+- **Approve/Deny** — pending destructive actions appear as cards with one-click buttons
+- **AI summaries** — 3-8 word descriptions of what each agent is doing
+- **Keyboard navigation** — `Ctrl+Cmd+.` to toggle, `Cmd+1-9` to jump, arrows to navigate
+- **Session save/restore** — bookmark sessions, resume later with `claude --resume`
+- **Terminal detection** — works with Warp, iTerm2, and Terminal.app
+- **Update checker** — notifies when new versions are available
+- **Quiet hours** — suppress notifications during configured hours
+
+### Build
 
 ```bash
 cd macos
-swift build          # debug build
-swift test           # run unit tests (11 tests)
-swift build -c release  # release build
+swift build              # debug
+swift test               # 31 tests
+swift build -c release   # release
+./scripts/install-macos.sh  # install to ~/Applications
 ```
 
 ---
 
-## Control Tower (Phase 3)
+## Rules Engine
 
-A local web dashboard on `localhost:3400` where you can approve or deny Claude Code permission requests from the browser — without switching tabs.
+34 default rules that run in <1ms. No API calls, no latency.
 
-### How it works
+**Auto-deny:** `rm -rf`, `git push --force`, `chmod 777`, `docker rm`, `kill -9`, `dd if=`, `DROP TABLE`, and more.
 
-`PreToolUse` fires before every Bash, Edit, or Write call. The hook runs `chief-of-agent respond`, which POSTs to the dashboard and long-polls for your decision. When you click Approve or Deny, the decision flows back to Claude Code via the `permissionDecision` field. The whole round-trip is under 1 second.
-
-If the dashboard isn't running, or you don't respond within 120 seconds, the hook returns `ask` — Claude Code falls back to the normal terminal permission prompt. No blocking, no degradation.
-
-### Setup
+**Auto-allow:** `Read`, `Glob`, `Grep` tools, read-only bash (`ls`, `cat`, `git status`), build tools (`npm test`, `swift build`), and more.
 
 ```bash
-# Start the dashboard
-cd dashboard
-npm install
-npm run dev   # or npm start for production
+# View your policies
+cat ~/.chief-of-agent/policies.json
 
-# Install the PreToolUse hook (one-time, opt-in)
-chief-of-agent setup --dashboard
+# Analyze your audit log and get rule suggestions
+chief-of-agent suggest
 ```
 
-### Dashboard UI
+### 3-Tier Decision Chain
 
-```
-┌─────────────────────────────────────────────┐
-│ Chief of Agent — Control Tower   5 active · 2 pending │
-├─────────────────────────────────────────────┤
-│ PENDING ACTIONS                              │
-│  secbot · Bash · 30s                         │
-│  ┌──────────────────────────────────────┐   │
-│  │ git push origin main                 │   │
-│  └──────────────────────────────────────┘   │
-│          [Approve]  [Deny]  [Terminal]       │
-├─────────────────────────────────────────────┤
-│ ALL AGENTS (2-column grid)                   │
-│  🟢 gis-erp   🟢 cekatan   🔴 website      │
-└─────────────────────────────────────────────┘
-```
+When a PreToolUse hook fires:
 
-- **Approve** — sends `allow` back to Claude Code (green)
-- **Deny** — sends `deny` with a system message (gray)
-- **Terminal** — sends `ask`, falls back to the terminal prompt (outline)
-- Live elapsed timer on each pending card
-- Agent grid polls every 2 seconds for status updates
-- SSE for instant pending request notifications
+1. **Tier 1 — Rules Engine** — match against policies.json (instant, deterministic)
+2. **Tier 2 — AI Classifier** — Claude Haiku classifies if enabled (opt-in, confidence-gated)
+3. **Tier 3 — Human** — pending card in menu bar or web dashboard (120s timeout → ask)
 
-### Architecture
-
-The response pipeline uses an in-memory Map of Promises in the Next.js server:
-
-1. `chief-of-agent respond` POSTs request → Next.js creates a Promise, awaits it (long-poll)
-2. Dashboard receives via SSE → shows pending card
-3. User clicks Approve → dashboard POSTs to `/api/respond` → Promise resolves
-4. Long-poll returns `{ decision: "allow" }` to CLI
-5. CLI writes `{ "hookSpecificOutput": { "permissionDecision": "allow" } }` to stdout
-6. Claude Code reads output → permission granted
+Every decision is logged to `~/.chief-of-agent/audit.jsonl`.
 
 ---
 
-## Roadmap
+## Web Dashboard
 
-**Phase 4 — Auto-Approval Engine**
-An AI-powered policy layer. Define rules like "auto-approve git commands in read-only repos" and let the engine handle routine approvals without interrupting you.
+Next.js 15 + React 19 dashboard on `localhost:3400`.
+
+- **Pending actions** — approve/deny from the browser
+- **Agent grid** — all sessions with status, CWD, time-ago
+- **Auto-decision feed** — live stream of rule/AI decisions
+- **SSE** — real-time updates, no polling for pending actions
+
+```bash
+cd dashboard
+npm install
+npm run dev    # localhost:3400
+```
+
+---
+
+## CLI Commands
+
+| Command | What |
+|---------|------|
+| `chief-of-agent setup [--dashboard\|--http] [--auto]` | Install hooks |
+| `chief-of-agent status` | Show all active sessions |
+| `chief-of-agent scan` | Discover running Claude Code processes |
+| `chief-of-agent rename <id> <name>` | Rename a session's project |
+| `chief-of-agent config show` | View configuration |
+| `chief-of-agent config set <key> <value>` | Update config |
+| `chief-of-agent audit [--last N]` | View decision log |
+| `chief-of-agent suggest` | Analyze audit log, recommend new rules |
+| `chief-of-agent respond` | 3-tier auto-responder (called by hooks) |
+
+---
+
+## Architecture
+
+```
+Claude Code ──hook──► chief-of-agent CLI
+                          │
+                ┌─────────┼─────────┐
+                ▼         ▼         ▼
+           Rules Engine  AI      Menu Bar / Dashboard
+           (policies)  (Haiku)   (approve/deny UI)
+                │         │         │
+                └─────────┼─────────┘
+                          ▼
+                     audit.jsonl
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `~/.chief-of-agent/state.json` | Active session states |
+| `~/.chief-of-agent/pending.json` | Pending approval requests |
+| `~/.chief-of-agent/policies.json` | Rules + AI config |
+| `~/.chief-of-agent/audit.jsonl` | Decision audit log (rotates at 10MB) |
+| `~/.chief-of-agent/config.json` | User preferences |
+| `~/.chief-of-agent/summaries.json` | Cached AI summaries |
+| `~/.chief-of-agent/saved_sessions.json` | Bookmarked sessions |
+
+---
+
+## HTTP Hook Server
+
+The macOS menu bar app includes a built-in HTTP server on `127.0.0.1:19222`. When you use `setup --http`, Claude Code sends hook events directly to the app via HTTP — no Node.js process spawning, ~5ms latency.
+
+```bash
+# Check if the server is running
+curl http://127.0.0.1:19222/health
+```
+
+---
+
+## Tests
+
+```bash
+npm test                          # 97 TypeScript tests
+cd macos && swift test            # 31 Swift tests
+cd dashboard && npm run build     # verify dashboard builds
+```
+
+128 tests total covering: parser, state management, config, notifications, setup, integration flow, rules engine, AI classifier, audit analysis, pending validation, session store, local summarizer.
 
 ---
 
 ## Contributing
 
-PRs welcome. The areas most needed:
-
-- **Linux support** — `notify-send` integration for Ubuntu/Debian
-- **Windows support** — PowerShell notification support
-- **Sound customization** — user-defined sounds per event type
-
-Please read the source in `src/` before opening a PR — the architecture is intentional and the security constraints (no `execSync` with interpolated strings, always `execFileSync` with argument arrays) are non-negotiable.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, security rules, and PR process.
 
 ---
 
@@ -238,4 +204,4 @@ MIT — see [LICENSE](LICENSE).
 
 ---
 
-Built by [Dio Atmando](https://dioatmando.com). Built with [Claude Code](https://claude.ai/code).
+Built by [Dio Atmando](https://github.com/odnamta). Built with [Claude Code](https://claude.ai/code).
