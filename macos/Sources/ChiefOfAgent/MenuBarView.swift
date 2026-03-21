@@ -90,6 +90,9 @@ struct MenuBarView: View {
                             },
                             onDeny: {
                                 stateWatcher.respondToPending(requestId: request.requestId, decision: "deny")
+                            },
+                            onDismiss: {
+                                stateWatcher.dismissPending(requestId: request.requestId)
                             }
                         )
                     }

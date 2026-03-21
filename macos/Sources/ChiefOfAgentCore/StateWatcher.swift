@@ -132,13 +132,24 @@ public class StateWatcher: ObservableObject {
         }
 
         var requests: [PendingRequest] = []
+        var staleIds: [String] = []
+
         for (requestId, var fields) in rawRequests {
             fields["requestId"] = requestId
             guard let reqData = try? JSONSerialization.data(withJSONObject: fields),
                   let req = try? JSONDecoder().decode(PendingRequest.self, from: reqData) else {
                 continue
             }
-            requests.append(req)
+            if req.isStale {
+                staleIds.append(requestId)
+            } else {
+                requests.append(req)
+            }
+        }
+
+        // Auto-remove stale entries from pending.json (orphaned by crashed CLI)
+        if !staleIds.isEmpty {
+            removeStalePendingFromFile(staleIds)
         }
 
         // Sort oldest first so the user sees them in arrival order
@@ -146,6 +157,32 @@ public class StateWatcher: ObservableObject {
         if sorted != pendingRequests {
             pendingRequests = sorted
         }
+    }
+
+    /// Remove stale pending request entries from pending.json
+    private func removeStalePendingFromFile(_ staleIds: [String]) {
+        let fm = FileManager.default
+        guard let data = fm.contents(atPath: pendingFilePath),
+              let rawJSON = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              var rawRequests = rawJSON["requests"] as? [String: Any] else {
+            return
+        }
+
+        for id in staleIds {
+            rawRequests.removeValue(forKey: id)
+        }
+
+        let updated: [String: Any] = ["requests": rawRequests]
+        guard let newData = try? JSONSerialization.data(withJSONObject: updated, options: .prettyPrinted) else {
+            return
+        }
+        let tmpPath = pendingFilePath + ".tmp"
+        try? newData.write(to: URL(fileURLWithPath: tmpPath))
+        try? fm.removeItem(atPath: pendingFilePath)
+        try? fm.moveItem(atPath: tmpPath, toPath: pendingFilePath)
+
+        // Reset mod date so next poll re-reads
+        lastPendingModificationDate = nil
     }
 
     // MARK: - Respond to Pending Action
@@ -168,6 +205,15 @@ public class StateWatcher: ObservableObject {
         pendingRequests.removeAll { $0.requestId == requestId }
         // Reset mod date so we re-read pending.json after CLI removes the entry
         lastPendingModificationDate = nil
+    }
+
+    // MARK: - Dismiss Stale Pending Action
+
+    /// Removes a pending request from pending.json without writing a response file.
+    /// Used for expired entries where the CLI has already timed out.
+    public func dismissPending(requestId: String) {
+        pendingRequests.removeAll { $0.requestId == requestId }
+        removeStalePendingFromFile([requestId])
     }
 
     // MARK: - Stale Session Cleanup
