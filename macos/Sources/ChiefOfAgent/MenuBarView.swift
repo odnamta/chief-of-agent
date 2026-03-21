@@ -158,7 +158,7 @@ struct MenuBarView: View {
                             }
                         },
                         onTap: {
-                            WarpActivator.activate()
+                            TerminalDetector.activate()
                         }
                     )
 
@@ -260,7 +260,7 @@ struct MenuBarView: View {
             }
         case 36: // Enter/Return — activate selected session
             if selectedIndex != nil {
-                WarpActivator.activate()
+                TerminalDetector.activate()
             }
         case 53: // Escape — close popover
             selectedIndex = nil
@@ -279,7 +279,7 @@ struct MenuBarView: View {
                     let idx = digit - 1
                     if idx < sessions.count {
                         selectedIndex = idx
-                        WarpActivator.activate()
+                        TerminalDetector.activate()
                     }
                 }
             }

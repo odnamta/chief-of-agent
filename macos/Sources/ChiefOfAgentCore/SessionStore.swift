@@ -101,36 +101,11 @@ public class SessionStore: ObservableObject {
 
     // MARK: - Restore
 
-    /// Open a new terminal tab, cd to CWD, and resume the Claude session.
-    /// Writes a temp shell script to avoid AppleScript injection via CWD/sessionId.
+    /// Open a new tab in the user's detected terminal and resume the Claude session.
+    /// Detects Warp, iTerm2, or Terminal.app automatically.
     public func restore(_ session: SavedSession) {
-        let fm = FileManager.default
-        let tmpDir = NSTemporaryDirectory()
-        let scriptPath = "\(tmpDir)coa-restore-\(UUID().uuidString).sh"
-
-        // Write a shell script with properly escaped arguments
-        let content = "#!/bin/bash\ncd \(shellEscape(session.cwd)) && exec claude --resume \(shellEscape(session.sessionId))\n"
-
-        guard let scriptData = content.data(using: .utf8),
-              fm.createFile(atPath: scriptPath, contents: scriptData) else {
-            print("[SessionStore] Failed to create restore script")
-            return
-        }
-
-        // Make executable
-        try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath)
-
-        // Open in Terminal.app via `open -a Terminal`
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        process.arguments = ["-a", "Terminal", scriptPath]
-        try? process.run()
-
-        // Clean up script after 5s (Terminal will have forked by then)
-        let pathToClean = scriptPath
-        DispatchQueue.global().asyncAfter(deadline: .now() + 5) {
-            try? FileManager.default.removeItem(atPath: pathToClean)
-        }
+        let command = "cd \(TerminalDetector.shellEscape(session.cwd)) && claude --resume \(TerminalDetector.shellEscape(session.sessionId))"
+        TerminalDetector.openNewTab(command: command)
     }
 
     // MARK: - Persistence
@@ -166,11 +141,4 @@ public class SessionStore: ObservableObject {
         try? FileManager.default.moveItem(atPath: tmpPath, toPath: storagePath)
     }
 
-    // MARK: - Helpers
-
-    /// Shell-safe escaping: wraps in single quotes, escapes internal single quotes.
-    /// This is the POSIX-standard approach: 'foo'\''bar' → foo'bar
-    private func shellEscape(_ s: String) -> String {
-        "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"
-    }
 }

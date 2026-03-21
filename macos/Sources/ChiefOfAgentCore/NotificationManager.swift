@@ -117,14 +117,14 @@ public class NotificationManager: NSObject, ObservableObject, UNUserNotification
 
     // MARK: - UNUserNotificationCenterDelegate
 
-    /// Called when user clicks a notification — activate Warp
+    /// Called when user clicks a notification — activate the user's terminal
     nonisolated public func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         Task { @MainActor in
-            WarpActivator.activate()
+            TerminalDetector.activate()
         }
         completionHandler()
     }
