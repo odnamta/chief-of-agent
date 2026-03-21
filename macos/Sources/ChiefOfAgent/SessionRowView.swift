@@ -4,12 +4,24 @@ import ChiefOfAgentCore
 struct SessionRowView: View {
     let sessionId: String
     let session: SessionData
+    var index: Int = 0
+    var isSelected: Bool = false
     let onTap: () -> Void
 
     var body: some View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
+                    // Index badge (Cmd+N shortcut hint)
+                    if index < 9 {
+                        Text("⌘\(index + 1)")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(.quaternary)
+                            .frame(width: 22)
+                    } else {
+                        Spacer().frame(width: 22)
+                    }
+
                     // Status indicator
                     Image(systemName: session.status.symbol)
                         .foregroundStyle(session.status.color)
@@ -45,14 +57,17 @@ struct SessionRowView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(backgroundForStatus(session.status))
+            .background(backgroundForState)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
 
-    private func backgroundForStatus(_ status: SessionStatus) -> some ShapeStyle {
-        switch status {
+    private var backgroundForState: some ShapeStyle {
+        if isSelected {
+            return AnyShapeStyle(Color.accentColor.opacity(0.15))
+        }
+        switch session.status {
         case .waiting:
             return AnyShapeStyle(Color.yellow.opacity(0.08))
         case .error:

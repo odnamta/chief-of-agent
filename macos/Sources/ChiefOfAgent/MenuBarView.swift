@@ -4,6 +4,7 @@ import ChiefOfAgentCore
 struct MenuBarView: View {
     @ObservedObject var stateWatcher: StateWatcher
     @State private var showSettings = false
+    @State private var selectedIndex: Int? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -31,6 +32,7 @@ struct MenuBarView: View {
             footer
         }
         .frame(width: 360)
+        .background(KeyEventHandler(onKeyDown: handleKeyDown))
     }
 
     // MARK: - Header
@@ -126,10 +128,12 @@ struct MenuBarView: View {
     private var sessionList: some View {
         ScrollView {
             VStack(spacing: 0) {
-                ForEach(stateWatcher.sortedSessions, id: \.id) { item in
+                ForEach(Array(stateWatcher.sortedSessions.enumerated()), id: \.element.id) { index, item in
                     SessionRowView(
                         sessionId: item.id,
                         session: item.session,
+                        index: index,
+                        isSelected: selectedIndex == index,
                         onTap: {
                             WarpActivator.activate()
                         }
@@ -143,6 +147,53 @@ struct MenuBarView: View {
             }
         }
         .frame(maxHeight: 400)
+    }
+
+    // MARK: - Keyboard Navigation
+
+    private func handleKeyDown(_ event: NSEvent) {
+        let sessions = stateWatcher.sortedSessions
+        guard !sessions.isEmpty else { return }
+
+        switch Int(event.keyCode) {
+        case 125: // Down arrow
+            if let idx = selectedIndex {
+                selectedIndex = min(idx + 1, sessions.count - 1)
+            } else {
+                selectedIndex = 0
+            }
+        case 126: // Up arrow
+            if let idx = selectedIndex {
+                selectedIndex = max(idx - 1, 0)
+            } else {
+                selectedIndex = sessions.count - 1
+            }
+        case 36: // Enter/Return — activate selected session
+            if selectedIndex != nil {
+                WarpActivator.activate()
+            }
+        case 53: // Escape — close popover
+            selectedIndex = nil
+            // Close the menu bar panel
+            for window in NSApp.windows {
+                if let panel = window as? NSPanel, panel.styleMask.contains(.nonactivatingPanel) {
+                    panel.orderOut(nil)
+                    return
+                }
+            }
+        default:
+            // Cmd+1-9 to jump to session by index
+            if event.modifierFlags.contains(.command) {
+                let chars = event.charactersIgnoringModifiers ?? ""
+                if let digit = chars.first?.wholeNumberValue, digit >= 1, digit <= 9 {
+                    let idx = digit - 1
+                    if idx < sessions.count {
+                        selectedIndex = idx
+                        WarpActivator.activate()
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - Footer
