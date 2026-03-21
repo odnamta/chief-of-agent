@@ -98,7 +98,7 @@ export default function AutoDecisionFeed({ decisions }: AutoDecisionFeedProps) {
       ) : (
         <div className="space-y-2 max-h-96 overflow-y-auto">
           {reversed.map((entry, i) => (
-            <DecisionRow key={`${entry.timestamp}-${i}`} entry={entry} />
+            <DecisionRow key={`${entry.timestamp}-${entry.tool}-${entry.project}`} entry={entry} />
           ))}
         </div>
       )}
