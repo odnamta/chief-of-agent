@@ -11,6 +11,17 @@ struct ChiefOfAgentApp: App {
     @StateObject private var hookServer: HookServer
 
     init() {
+        // Duplicate launch detection — if another instance is running, activate it and quit
+        let bundleId = Bundle.main.bundleIdentifier ?? "dev.chiefofagent.ChiefOfAgent"
+        let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId)
+        if running.count > 1 {
+            if let existing = running.first(where: { $0 != NSRunningApplication.current }) {
+                existing.activate()
+            }
+            // Delay termination slightly so SwiftUI can finish init
+            DispatchQueue.main.async { NSApp.terminate(nil) }
+        }
+
         let watcher = StateWatcher()
         let notifier = NotificationManager()
         let summarizer = SummaryManager()

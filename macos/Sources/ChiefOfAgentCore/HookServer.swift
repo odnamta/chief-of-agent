@@ -56,7 +56,11 @@ public class HookServer: ObservableObject {
                         print("[HookServer] Listening on 127.0.0.1:\(self.port)")
                     case .failed(let error):
                         self.isRunning = false
-                        print("[HookServer] Failed: \(error)")
+                        if case NWError.posix(let code) = error, code == .EADDRINUSE {
+                            print("[HookServer] Port \(self.port) already in use — another instance may be running")
+                        } else {
+                            print("[HookServer] Failed: \(error)")
+                        }
                     case .cancelled:
                         self.isRunning = false
                     default:
