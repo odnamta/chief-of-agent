@@ -1,0 +1,13 @@
+# Exclude everything except dist/ for npm publish
+macos/
+dashboard/
+scripts/
+src/
+.github/
+*.md
+!README.md
+!LICENSE
+tsconfig.json
+vitest.config.ts
+ROADMAP.md
+CHANGELOG.md
