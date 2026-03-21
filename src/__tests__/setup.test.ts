@@ -14,7 +14,8 @@ describe('setup', () => {
 
   it('hook commands reference chief-of-agent without flags', () => {
     const hooks = generateHooksConfig();
-    const cmd = hooks.Notification[0].hooks[0].command;
+    const hook = hooks.Notification[0].hooks[0];
+    const cmd = hook.type === 'command' ? hook.command : '';
     expect(cmd).toBe('chief-of-agent notify');
     expect(cmd).not.toContain('--event');
     expect(cmd).not.toContain('--session');

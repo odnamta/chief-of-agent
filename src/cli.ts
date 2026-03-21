@@ -10,7 +10,7 @@ import { parseHookInput } from './parser.js';
 import { StateManager } from './state.js';
 import { ConfigManager } from './config.js';
 import { NotificationDispatcher } from './notify.js';
-import { installHooks, installDashboardHook, ensureConfigDir } from './setup.js';
+import { installHooks, installDashboardHook, installHTTPHook, ensureConfigDir } from './setup.js';
 import { loadPolicies, matchRule } from './rules.js';
 import { classifyWithAI } from './ai-classifier.js';
 import { logAudit, readAudit, suggestRules } from './audit.js';
@@ -200,12 +200,15 @@ program
   .command('setup')
   .description('Install hooks into ~/.claude/settings.json')
   .option('--dashboard', 'Also install PreToolUse hook for Control Tower permission routing')
+  .option('--http', 'Install HTTP hooks pointing to macOS menu bar app (:19222)')
   .option('--auto', 'Create default policies.json with sensible rules')
-  .action((options: { dashboard?: boolean; auto?: boolean }) => {
+  .action((options: { dashboard?: boolean; http?: boolean; auto?: boolean }) => {
     const configDir = ensureConfigDir();
     const { settingsPath, created } = installHooks();
 
-    if (options.dashboard) {
+    if (options.http) {
+      installHTTPHook();
+    } else if (options.dashboard) {
       installDashboardHook();
     }
 
@@ -213,12 +216,16 @@ program
       const policiesPath = ensurePoliciesFile();
       console.log('\n  Chief of Agent — Setup Complete\n');
       console.log(`  Hooks: ${created ? 'created' : 'merged into'} ${settingsPath}`);
-      if (options.dashboard) {
+      if (options.http) {
+        console.log('  HTTP hooks: PreToolUse + Session events → 127.0.0.1:19222 (macOS app)');
+      } else if (options.dashboard) {
         console.log('  Dashboard hook: PreToolUse (Bash|Edit|Write) → localhost:3400');
       }
       console.log(`  Config: ${path.join(configDir, 'config.json')}`);
       console.log(`  Policies: ${policiesPath} (default rules installed)`);
-      if (options.dashboard) {
+      if (options.http) {
+        console.log('\n  HTTP hooks enabled. Make sure the macOS menu bar app is running.');
+      } else if (options.dashboard) {
         console.log('\n  Control Tower + Smart Auto-Responder enabled.');
         console.log('  Start the dashboard: cd dashboard && npm run dev');
       }
@@ -234,11 +241,15 @@ program
 
     console.log('\n  Chief of Agent — Setup Complete\n');
     console.log(`  Hooks: ${created ? 'created' : 'merged into'} ${settingsPath}`);
-    if (options.dashboard) {
+    if (options.http) {
+      console.log('  HTTP hooks: PreToolUse + Session events → 127.0.0.1:19222 (macOS app)');
+    } else if (options.dashboard) {
       console.log('  Dashboard hook: PreToolUse (Bash|Edit|Write) → localhost:3400');
     }
     console.log(`  Config: ${cfgPath}`);
-    if (options.dashboard) {
+    if (options.http) {
+      console.log('\n  HTTP hooks enabled. Make sure the macOS menu bar app is running.');
+    } else if (options.dashboard) {
       console.log('\n  Control Tower enabled. Start the dashboard: cd dashboard && npm run dev');
     }
     console.log('\n  You\'re all set. Start Claude Code sessions and get notified!\n');

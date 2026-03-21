@@ -20,7 +20,7 @@ describe('generateDashboardHookConfig', () => {
 
   it('uses chief-of-agent respond command', () => {
     const config = generateDashboardHookConfig();
-    const hook = config.PreToolUse[0].hooks[0];
+    const hook = config.PreToolUse[0].hooks[0] as { type: string; command: string };
     expect(hook.command).toBe('chief-of-agent respond');
     expect(hook.type).toBe('command');
   });
