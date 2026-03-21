@@ -5,6 +5,7 @@ struct MenuBarView: View {
     @ObservedObject var stateWatcher: StateWatcher
     @ObservedObject var summaryManager: SummaryManager
     @ObservedObject var sessionStore: SessionStore
+    var hookServerRunning: Bool = false
     @State private var showSettings = false
     @State private var selectedIndex: Int? = nil
 
@@ -327,11 +328,29 @@ struct MenuBarView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
 
-            Text("⌃⌘. to toggle")
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(.quaternary)
-                .frame(maxWidth: .infinity)
-                .padding(.bottom, 4)
+            HStack(spacing: 8) {
+                // Server status
+                if hookServerRunning {
+                    HStack(spacing: 3) {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 5, height: 5)
+                        Text("HTTP :19222")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(.quaternary)
+                    }
+                }
+
+                Spacer()
+
+                Text("⌃⌘. to toggle")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.quaternary)
+
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 4)
         }
     }
 }

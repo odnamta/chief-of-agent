@@ -8,12 +8,14 @@ struct ChiefOfAgentApp: App {
     @StateObject private var notificationManager: NotificationManager
     @StateObject private var summaryManager: SummaryManager
     @StateObject private var sessionStore: SessionStore
+    @StateObject private var hookServer: HookServer
 
     init() {
         let watcher = StateWatcher()
         let notifier = NotificationManager()
         let summarizer = SummaryManager()
         let store = SessionStore()
+        let server = HookServer()
 
         watcher.onTransition = { sessionId, session, from in
             Task { @MainActor in
@@ -28,8 +30,20 @@ struct ChiefOfAgentApp: App {
             }
         }
 
+        // Hook server receives events directly from Claude Code over HTTP
+        server.onHookEvent = { event in
+            // For now, pass through to file-based state management
+            // The CLI hooks will write to state.json as before
+            // This server provides a fast path for future direct event handling
+            let hookEvent = event["hookEvent"] as? String ?? ""
+            let sessionId = event["sessionId"] as? String ?? ""
+            print("[HookServer] Received \(hookEvent) for session \(sessionId.prefix(8))...")
+            return ["permissionDecision": "ask"] as [String: Any]
+        }
+
         watcher.start()
         summarizer.start()
+        server.start()
         notifier.requestPermission()
         HotkeyManager.shared.register()
 
@@ -37,11 +51,12 @@ struct ChiefOfAgentApp: App {
         _notificationManager = StateObject(wrappedValue: notifier)
         _summaryManager = StateObject(wrappedValue: summarizer)
         _sessionStore = StateObject(wrappedValue: store)
+        _hookServer = StateObject(wrappedValue: server)
     }
 
     var body: some Scene {
         MenuBarExtra {
-            MenuBarView(stateWatcher: stateWatcher, summaryManager: summaryManager, sessionStore: sessionStore)
+            MenuBarView(stateWatcher: stateWatcher, summaryManager: summaryManager, sessionStore: sessionStore, hookServerRunning: hookServer.isRunning)
         } label: {
             let pendingCount = stateWatcher.pendingRequests.count
             let attentionCount = stateWatcher.attentionCount
