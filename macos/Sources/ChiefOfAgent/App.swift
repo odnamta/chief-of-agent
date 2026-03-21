@@ -19,6 +19,7 @@ struct ChiefOfAgentApp: App {
 
         watcher.start()
         notifier.requestPermission()
+        HotkeyManager.shared.register()
 
         _stateWatcher = StateObject(wrappedValue: watcher)
         _notificationManager = StateObject(wrappedValue: notifier)

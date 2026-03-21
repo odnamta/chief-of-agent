@@ -148,42 +148,50 @@ struct MenuBarView: View {
     // MARK: - Footer
 
     private var footer: some View {
-        HStack {
-            Button {
-                showSettings.toggle()
-            } label: {
-                Image(systemName: "gear")
-                    .font(.system(size: 12))
-                Text("Settings")
-                    .font(.system(size: 12))
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .popover(isPresented: $showSettings) {
-                SettingsView()
-            }
-
-            Spacer()
-
-            if stateWatcher.staleCount > 0 {
-                Button("Clean stale (\(stateWatcher.staleCount))") {
-                    stateWatcher.removeStale()
+        VStack(spacing: 0) {
+            HStack {
+                Button {
+                    showSettings.toggle()
+                } label: {
+                    Image(systemName: "gear")
+                        .font(.system(size: 12))
+                    Text("Settings")
+                        .font(.system(size: 12))
                 }
                 .buttonStyle(.plain)
-                .font(.system(size: 11))
-                .foregroundStyle(.orange)
-            }
+                .foregroundStyle(.secondary)
+                .popover(isPresented: $showSettings) {
+                    SettingsView()
+                }
 
-            Spacer()
+                Spacer()
 
-            Button("Quit") {
-                NSApplication.shared.terminate(nil)
+                if stateWatcher.staleCount > 0 {
+                    Button("Clean stale (\(stateWatcher.staleCount))") {
+                        stateWatcher.removeStale()
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.orange)
+                }
+
+                Spacer()
+
+                Button("Quit") {
+                    NSApplication.shared.terminate(nil)
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
             }
-            .buttonStyle(.plain)
-            .font(.system(size: 12))
-            .foregroundStyle(.secondary)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+
+            Text("⌃⌘. to toggle")
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(.quaternary)
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 4)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
     }
 }
