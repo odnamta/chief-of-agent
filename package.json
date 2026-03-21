@@ -1,6 +1,6 @@
 {
   "name": "chief-of-agent",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Agent attention manager for Claude Code CLI — know which agent needs you",
   "type": "module",
   "bin": {
@@ -13,7 +13,14 @@
     "test:watch": "vitest",
     "prepublishOnly": "npm run build"
   },
-  "keywords": ["claude", "claude-code", "agent", "notification", "cli", "hooks"],
+  "keywords": [
+    "claude",
+    "claude-code",
+    "agent",
+    "notification",
+    "cli",
+    "hooks"
+  ],
   "author": "Dio Atmando",
   "license": "MIT",
   "repository": {
@@ -23,15 +30,17 @@
   "engines": {
     "node": ">=18"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "dependencies": {
-    "commander": "^13.0.0",
+    "commander": "^13.1.0",
     "proper-lockfile": "^4.1.2"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
+    "@types/node": "^22.19.15",
     "@types/proper-lockfile": "^4.1.4",
-    "typescript": "^5.7.0",
-    "vitest": "^3.0.0"
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
   }
 }

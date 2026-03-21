@@ -72,7 +72,7 @@ struct SettingsView: View {
             Divider()
 
             // Version
-            Text("Chief of Agent v0.2.0")
+            Text("Chief of Agent v0.3.0")
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)
         }
