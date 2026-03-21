@@ -1,7 +1,9 @@
 import SwiftUI
 import ServiceManagement
+import ChiefOfAgentCore
 
 struct SettingsView: View {
+    @StateObject private var updateChecker = UpdateChecker()
     @State private var launchAtLogin = false
     @State private var quietHoursEnabled = true
     @State private var quietStart = "23:00"
@@ -71,14 +73,33 @@ struct SettingsView: View {
 
             Divider()
 
-            // Version
-            Text("Chief of Agent v0.3.0")
-                .font(.system(size: 11))
-                .foregroundStyle(.tertiary)
+            // Version + update check
+            HStack {
+                Text("Chief of Agent v\(UpdateChecker.currentVersion)")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+
+                Spacer()
+
+                if updateChecker.updateAvailable, let version = updateChecker.latestVersion {
+                    Button("v\(version) available") {
+                        if let urlStr = updateChecker.releaseURL,
+                           let url = URL(string: urlStr) {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.blue)
+                }
+            }
         }
         .padding(16)
         .frame(width: 280)
-        .onAppear { loadConfig() }
+        .onAppear {
+            loadConfig()
+            updateChecker.checkIfNeeded()
+        }
     }
 
     // MARK: - Launch at Login
