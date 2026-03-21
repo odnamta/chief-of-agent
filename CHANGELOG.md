@@ -7,6 +7,66 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.3.0] - 2026-03-21
+
+### Added — Phase 4: Agent Governance
+
+- **Rules engine** — 34 default rules (destructive deny list + safe allow list), regex matching, first-match-wins
+- **AI classifier** — Claude Haiku classification (opt-in, confidence-gated) as Tier 2
+- **3-tier auto-responder** — Rules → AI → Human decision chain for PreToolUse hooks
+- **Audit log** — Append-only JSONL at `~/.chief-of-agent/audit.jsonl` with 10MB rotation
+- **`chief-of-agent suggest`** — Analyzes audit log, recommends new rules based on decision patterns
+- **`chief-of-agent audit`** — View recent decisions with tier, latency, tool, detail
+- **`chief-of-agent scan`** — Discover running Claude Code processes
+- **`chief-of-agent rename`** — Rename session project names
+- **Auto-decision feed** — Live SSE stream of rule/AI decisions in dashboard
+
+### Added — macOS Menu Bar Improvements
+
+- **HTTP hook server** — NWListener on 127.0.0.1:19222 for ~5ms hook handling
+- **Approve/Deny in menu bar** — Pending action cards with one-click buttons
+- **Global hotkey** — `Ctrl+Cmd+.` to toggle menu bar popover (Carbon Events)
+- **Keyboard navigation** — Arrow keys + `Cmd+1-9` + Enter/Esc
+- **AI session summaries** — Batch Haiku + local heuristic fast path (20+ patterns)
+- **Session save/restore** — Bookmark sessions, resume with `claude --resume`
+- **Terminal detection** — Auto-detect Warp, iTerm2, Terminal.app
+- **Expired pending UI** — Dimmed cards with Dismiss button for timed-out requests
+- **Stale cleanup** — Auto-remove orphaned pending requests after 5 minutes
+- **Duplicate launch detection** — Activates existing instance instead of conflicting
+- **Update checker** — GitHub releases API check with semver comparison
+
+### Added — Infrastructure
+
+- **`setup --http`** — Install HTTP hooks pointing to macOS app (type:http in settings.json)
+- **GitHub Actions CI** — test.yml (Node + Swift + Dashboard) + release.yml (npm + .app.zip)
+- **CONTRIBUTING.md** — Dev setup, security rules, PR process
+- **Issue templates** — Bug report + feature request
+- **Dependabot** — Auto-update npm + GitHub Actions dependencies
+
+### Changed
+
+- Dashboard upgraded to **Next.js 15.5 + React 19.2**
+- `WarpActivator` replaced by `TerminalDetector` (supports all terminals)
+- Session history auto-tracked on SessionEnd
+
+### Fixed
+
+- **AppleScript injection** in session restore — replaced with temp script approach
+- **Path traversal** via requestId — UUID validation on both Swift and TypeScript sides
+- **HookServer async/sync mismatch** — DispatchSemaphore bridge for real decisions
+- **Timer pileup** — isPolling guard prevents re-entrant poll callbacks
+- **Process timeout** — 30s kill timer on claude CLI for summaries
+- **Hotkey dead code** — Removed nonsensical guard statement
+
+### Security
+
+- UUID validation on all requestIds (Swift + TypeScript)
+- Shell escaping via POSIX single-quote wrapping
+- HookServer localhost-only binding
+- .npmignore to exclude non-production files from npm tarball
+
+---
+
 ## [0.2.0] - 2026-03-16
 
 ### Added — Phase 3: Control Tower
