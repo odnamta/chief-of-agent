@@ -7,6 +7,8 @@ struct SessionRowView: View {
     var summary: String? = nil
     var index: Int = 0
     var isSelected: Bool = false
+    var isSaved: Bool = false
+    var onSaveToggle: (() -> Void)? = nil
     let onTap: () -> Void
 
     var body: some View {
@@ -45,6 +47,16 @@ struct SessionRowView: View {
                     Text(session.timeSinceLastEvent)
                         .font(.system(size: 11, design: .monospaced))
                         .foregroundStyle(.tertiary)
+
+                    // Save/bookmark button
+                    if let onSaveToggle = onSaveToggle {
+                        Button(action: onSaveToggle) {
+                            Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
+                                .font(.system(size: 10))
+                                .foregroundStyle(isSaved ? Color.orange : Color.gray.opacity(0.4))
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
 
                 // AI summary (what the agent is doing)

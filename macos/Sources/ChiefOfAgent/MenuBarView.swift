@@ -4,6 +4,7 @@ import ChiefOfAgentCore
 struct MenuBarView: View {
     @ObservedObject var stateWatcher: StateWatcher
     @ObservedObject var summaryManager: SummaryManager
+    @ObservedObject var sessionStore: SessionStore
     @State private var showSettings = false
     @State private var selectedIndex: Int? = nil
 
@@ -25,6 +26,12 @@ struct MenuBarView: View {
                 emptyState
             } else {
                 sessionList
+            }
+
+            // Saved sessions section
+            if !sessionStore.savedSessions.isEmpty {
+                Divider()
+                savedSection
             }
 
             Divider()
@@ -136,6 +143,19 @@ struct MenuBarView: View {
                         summary: summaryManager.summaries[item.id],
                         index: index,
                         isSelected: selectedIndex == index,
+                        isSaved: sessionStore.isSaved(item.id),
+                        onSaveToggle: {
+                            if sessionStore.isSaved(item.id) {
+                                sessionStore.unsave(sessionId: item.id)
+                            } else {
+                                sessionStore.save(
+                                    sessionId: item.id,
+                                    project: item.session.project,
+                                    cwd: item.session.cwd,
+                                    summary: summaryManager.summaries[item.id]
+                                )
+                            }
+                        },
                         onTap: {
                             WarpActivator.activate()
                         }
@@ -149,6 +169,73 @@ struct MenuBarView: View {
             }
         }
         .frame(maxHeight: 400)
+    }
+
+    // MARK: - Saved Sessions
+
+    private var savedSection: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Image(systemName: "bookmark.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.orange)
+                Text("SAVED SESSIONS")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.orange)
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
+
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(sessionStore.savedSessions) { saved in
+                        HStack(spacing: 8) {
+                            Image(systemName: "arrow.counterclockwise")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.blue)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(saved.project)
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .lineLimit(1)
+                                if let summary = saved.summary {
+                                    Text(summary)
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                            }
+
+                            Spacer()
+
+                            Button("Resume") {
+                                sessionStore.restore(saved)
+                            }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.blue)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Color.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 4))
+
+                            Button {
+                                sessionStore.unsave(sessionId: saved.sessionId)
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 6)
+                    }
+                }
+            }
+            .frame(maxHeight: 160)
+        }
     }
 
     // MARK: - Keyboard Navigation

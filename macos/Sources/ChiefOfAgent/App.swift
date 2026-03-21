@@ -7,11 +7,13 @@ struct ChiefOfAgentApp: App {
     @StateObject private var stateWatcher: StateWatcher
     @StateObject private var notificationManager: NotificationManager
     @StateObject private var summaryManager: SummaryManager
+    @StateObject private var sessionStore: SessionStore
 
     init() {
         let watcher = StateWatcher()
         let notifier = NotificationManager()
         let summarizer = SummaryManager()
+        let store = SessionStore()
 
         watcher.onTransition = { sessionId, session, from in
             Task { @MainActor in
@@ -34,11 +36,12 @@ struct ChiefOfAgentApp: App {
         _stateWatcher = StateObject(wrappedValue: watcher)
         _notificationManager = StateObject(wrappedValue: notifier)
         _summaryManager = StateObject(wrappedValue: summarizer)
+        _sessionStore = StateObject(wrappedValue: store)
     }
 
     var body: some Scene {
         MenuBarExtra {
-            MenuBarView(stateWatcher: stateWatcher, summaryManager: summaryManager)
+            MenuBarView(stateWatcher: stateWatcher, summaryManager: summaryManager, sessionStore: sessionStore)
         } label: {
             let pendingCount = stateWatcher.pendingRequests.count
             let attentionCount = stateWatcher.attentionCount
