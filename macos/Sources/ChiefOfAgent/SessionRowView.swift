@@ -4,6 +4,7 @@ import ChiefOfAgentCore
 struct SessionRowView: View {
     let sessionId: String
     let session: SessionData
+    var summary: String? = nil
     var index: Int = 0
     var isSelected: Bool = false
     let onTap: () -> Void
@@ -46,13 +47,22 @@ struct SessionRowView: View {
                         .foregroundStyle(.tertiary)
                 }
 
+                // AI summary (what the agent is doing)
+                if let summary = summary {
+                    Text(summary)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .padding(.leading, 44) // align past index badge + status icon
+                }
+
                 // Waiting context (secondary text)
                 if session.status.isAttentionNeeded, let context = session.waiting_context {
                     Text(context)
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
-                        .padding(.leading, 22) // align with project name
+                        .padding(.leading, 44) // align past index badge + status icon
                 }
             }
             .padding(.horizontal, 12)

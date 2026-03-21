@@ -6,10 +6,12 @@ import ChiefOfAgentCore
 struct ChiefOfAgentApp: App {
     @StateObject private var stateWatcher: StateWatcher
     @StateObject private var notificationManager: NotificationManager
+    @StateObject private var summaryManager: SummaryManager
 
     init() {
         let watcher = StateWatcher()
         let notifier = NotificationManager()
+        let summarizer = SummaryManager()
 
         watcher.onTransition = { sessionId, session, from in
             Task { @MainActor in
@@ -17,17 +19,26 @@ struct ChiefOfAgentApp: App {
             }
         }
 
+        // Trigger summary refresh when sessions change
+        watcher.onSessionsChanged = { sessions in
+            Task { @MainActor in
+                summarizer.refreshIfNeeded(sessions: sessions)
+            }
+        }
+
         watcher.start()
+        summarizer.start()
         notifier.requestPermission()
         HotkeyManager.shared.register()
 
         _stateWatcher = StateObject(wrappedValue: watcher)
         _notificationManager = StateObject(wrappedValue: notifier)
+        _summaryManager = StateObject(wrappedValue: summarizer)
     }
 
     var body: some Scene {
         MenuBarExtra {
-            MenuBarView(stateWatcher: stateWatcher)
+            MenuBarView(stateWatcher: stateWatcher, summaryManager: summaryManager)
         } label: {
             let pendingCount = stateWatcher.pendingRequests.count
             let attentionCount = stateWatcher.attentionCount

@@ -3,6 +3,7 @@ import ChiefOfAgentCore
 
 struct MenuBarView: View {
     @ObservedObject var stateWatcher: StateWatcher
+    @ObservedObject var summaryManager: SummaryManager
     @State private var showSettings = false
     @State private var selectedIndex: Int? = nil
 
@@ -132,6 +133,7 @@ struct MenuBarView: View {
                     SessionRowView(
                         sessionId: item.id,
                         session: item.session,
+                        summary: summaryManager.summaries[item.id],
                         index: index,
                         isSelected: selectedIndex == index,
                         onTap: {

@@ -18,6 +18,9 @@ public class StateWatcher: ObservableObject {
     /// Callback fired when a session transitions to waiting or error
     public var onTransition: ((_ sessionId: String, _ session: SessionData, _ from: SessionStatus?) -> Void)?
 
+    /// Callback fired when sessions dict changes (for summary refresh)
+    public var onSessionsChanged: ((_ sessions: [String: SessionData]) -> Void)?
+
     // MARK: - File Watching
 
     private let stateFilePath: String
@@ -97,8 +100,13 @@ public class StateWatcher: ObservableObject {
         previousStatuses = newSessions.mapValues { $0.status }
 
         // Update published state
+        let changed = sessions != newSessions
         sessions = newSessions
         attentionCount = newSessions.values.filter { $0.status.isAttentionNeeded }.count
+
+        if changed {
+            onSessionsChanged?(newSessions)
+        }
     }
 
     // MARK: - Pending Actions Polling
