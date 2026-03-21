@@ -62,16 +62,10 @@ final class HotkeyManager {
         }
     }
 
-    /// Toggle the menu bar popover by clicking the status item button.
+    /// Toggle the menu bar popover by finding and toggling the MenuBarExtra panel.
     private func handleHotKey() {
         DispatchQueue.main.async {
-            // Find our status item button and toggle it via press action
-            guard let button = NSApp.currentEvent != nil ? nil : nil as NSStatusBarButton? else {
-                // Fallback: simulate click on the status item
-                self.toggleStatusItem()
-                return
-            }
-            button.performClick(nil)
+            self.toggleStatusItem()
         }
     }
 

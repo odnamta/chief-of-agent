@@ -81,12 +81,23 @@ function ensureDirs(): void {
   }
 }
 
+// ── Validation ──────────────────────────────────────────────────────────────
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isValidRequestId(id: string): boolean {
+  return UUID_RE.test(id);
+}
+
 // ── Public API ───────────────────────────────────────────────────────────────
 
 /**
  * Writes a pending request to pending.json so the menu bar app can display it.
  */
 export function writePendingRequest(requestId: string, req: PendingRequest): void {
+  if (!isValidRequestId(requestId)) {
+    throw new Error(`[pending] Invalid requestId format: ${requestId}`);
+  }
   const data = readPendingFile();
   data.requests[requestId] = req;
   writePendingFile(data);
@@ -110,6 +121,7 @@ export async function pollForResponse(
   requestId: string,
   timeoutMs: number = 120_000,
 ): Promise<PendingDecision> {
+  if (!isValidRequestId(requestId)) return 'ask';
   ensureDirs();
   const responsePath = path.join(RESPONSES_DIR, `${requestId}.json`);
   const deadline = Date.now() + timeoutMs;
@@ -140,6 +152,9 @@ export async function pollForResponse(
  * Writes a response file (used by tests and potentially a CLI subcommand).
  */
 export function writeResponse(requestId: string, decision: 'allow' | 'deny'): void {
+  if (!isValidRequestId(requestId)) {
+    throw new Error(`[pending] Invalid requestId format: ${requestId}`);
+  }
   ensureDirs();
   const responsePath = path.join(RESPONSES_DIR, `${requestId}.json`);
   fs.writeFileSync(responsePath, JSON.stringify({ decision }), 'utf-8');

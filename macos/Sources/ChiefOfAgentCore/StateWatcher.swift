@@ -29,6 +29,7 @@ public class StateWatcher: ObservableObject {
     private var timer: Timer?
     private var lastModificationDate: Date?
     private var lastPendingModificationDate: Date?
+    private var isPolling = false
 
     // MARK: - Init
 
@@ -48,8 +49,11 @@ public class StateWatcher: ObservableObject {
         pollPending()
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                self?.poll()
-                self?.pollPending()
+                guard let self = self, !self.isPolling else { return }
+                self.isPolling = true
+                self.poll()
+                self.pollPending()
+                self.isPolling = false
             }
         }
     }
@@ -193,11 +197,23 @@ public class StateWatcher: ObservableObject {
         lastPendingModificationDate = nil
     }
 
+    // MARK: - Request ID Validation
+
+    /// Validates that a requestId is a proper UUID to prevent path traversal attacks.
+    private func isValidRequestId(_ id: String) -> Bool {
+        let pattern = "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        return id.range(of: pattern, options: .regularExpression) != nil
+    }
+
     // MARK: - Respond to Pending Action
 
     /// Writes a response file that the CLI polls.
     /// The CLI will pick it up within 500ms and remove it from pending.json.
     public func respondToPending(requestId: String, decision: String) {
+        guard isValidRequestId(requestId) else {
+            print("[StateWatcher] Rejected invalid requestId: \(requestId)")
+            return
+        }
         let fm = FileManager.default
 
         // Ensure responses dir exists
@@ -220,6 +236,10 @@ public class StateWatcher: ObservableObject {
     /// Removes a pending request from pending.json without writing a response file.
     /// Used for expired entries where the CLI has already timed out.
     public func dismissPending(requestId: String) {
+        guard isValidRequestId(requestId) else {
+            print("[StateWatcher] Rejected invalid requestId: \(requestId)")
+            return
+        }
         pendingRequests.removeAll { $0.requestId == requestId }
         removeStalePendingFromFile([requestId])
     }
@@ -252,7 +272,7 @@ public class StateWatcher: ObservableObject {
         // Read, filter, write back
         let fm = FileManager.default
         guard let data = fm.contents(atPath: stateFilePath),
-              var stateFile = try? JSONDecoder().decode(StateFile.self, from: data) else { return }
+              let stateFile = try? JSONDecoder().decode(StateFile.self, from: data) else { return }
 
         var mutableSessions = stateFile.sessions
         for id in staleIds {

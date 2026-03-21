@@ -102,19 +102,35 @@ public class SessionStore: ObservableObject {
     // MARK: - Restore
 
     /// Open a new terminal tab, cd to CWD, and resume the Claude session.
-    /// Uses AppleScript to create a new Terminal.app tab.
+    /// Writes a temp shell script to avoid AppleScript injection via CWD/sessionId.
     public func restore(_ session: SavedSession) {
-        let script = """
-        tell application "Terminal"
-            activate
-            do script "cd \(escapeForAppleScript(session.cwd)) && claude --resume \(escapeForAppleScript(session.sessionId))"
-        end tell
-        """
+        let fm = FileManager.default
+        let tmpDir = NSTemporaryDirectory()
+        let scriptPath = "\(tmpDir)coa-restore-\(UUID().uuidString).sh"
 
+        // Write a shell script with properly escaped arguments
+        let content = "#!/bin/bash\ncd \(shellEscape(session.cwd)) && exec claude --resume \(shellEscape(session.sessionId))\n"
+
+        guard let scriptData = content.data(using: .utf8),
+              fm.createFile(atPath: scriptPath, contents: scriptData) else {
+            print("[SessionStore] Failed to create restore script")
+            return
+        }
+
+        // Make executable
+        try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath)
+
+        // Open in Terminal.app via `open -a Terminal`
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        process.arguments = ["-e", script]
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        process.arguments = ["-a", "Terminal", scriptPath]
         try? process.run()
+
+        // Clean up script after 5s (Terminal will have forked by then)
+        let pathToClean = scriptPath
+        DispatchQueue.global().asyncAfter(deadline: .now() + 5) {
+            try? FileManager.default.removeItem(atPath: pathToClean)
+        }
     }
 
     // MARK: - Persistence
@@ -152,8 +168,9 @@ public class SessionStore: ObservableObject {
 
     // MARK: - Helpers
 
-    private func escapeForAppleScript(_ s: String) -> String {
-        s.replacingOccurrences(of: "\\", with: "\\\\")
-         .replacingOccurrences(of: "\"", with: "\\\"")
+    /// Shell-safe escaping: wraps in single quotes, escapes internal single quotes.
+    /// This is the POSIX-standard approach: 'foo'\''bar' → foo'bar
+    private func shellEscape(_ s: String) -> String {
+        "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 }

@@ -200,7 +200,7 @@ public class SummaryManager: ObservableObject {
         return parseResponse(result, sessionIds: sessions.map { $0.id })
     }
 
-    /// Run `claude -p --model haiku` and return stdout.
+    /// Run `claude -p --model haiku` and return stdout. Kills process after 30s timeout.
     private func runClaude(prompt: String) -> String? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
@@ -212,9 +212,27 @@ public class SummaryManager: ObservableObject {
 
         do {
             try process.run()
-            process.waitUntilExit()
         } catch {
             print("[SummaryManager] Failed to run claude: \(error)")
+            return nil
+        }
+
+        // Kill after 30s if still running to prevent app hangs
+        let killTimer = DispatchSource.makeTimerSource(queue: .global())
+        killTimer.schedule(deadline: .now() + 30)
+        killTimer.setEventHandler {
+            if process.isRunning {
+                print("[SummaryManager] Killing hung claude process (30s timeout)")
+                process.terminate()
+            }
+        }
+        killTimer.resume()
+
+        process.waitUntilExit()
+        killTimer.cancel()
+
+        guard process.terminationStatus == 0 else {
+            print("[SummaryManager] claude exited with status \(process.terminationStatus)")
             return nil
         }
 
