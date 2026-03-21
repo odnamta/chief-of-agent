@@ -4,7 +4,8 @@ import Network
 /// Lightweight HTTP server on 127.0.0.1:19222 that receives Claude Code hook events.
 ///
 /// Claude Code supports `"type": "http"` hooks that POST JSON to a URL.
-/// This server handles those events and dispatches them to the app's state management.
+/// This server handles those events via DispatchSemaphore to bridge the
+/// NWConnection background callback to the @MainActor event handler.
 public class HookServer: ObservableObject {
 
     public static let defaultPort: UInt16 = 19222
@@ -14,9 +15,14 @@ public class HookServer: ObservableObject {
     private var listener: NWListener?
     private let port: UInt16
 
-    /// Callback for hook events. Called on main thread.
+    /// Callback for hook events. Called on MainActor.
     /// Receives the parsed JSON and returns a response dict.
+    /// The NW callback thread blocks (via semaphore) until this returns.
     @MainActor public var onHookEvent: ((_ event: [String: Any]) -> [String: Any])?
+
+    /// Callback to wait for a pending decision. Called on NW background thread (nonisolated).
+    /// Takes a requestId and timeout, returns the decision or nil.
+    public var onWaitForDecision: ((_ requestId: String, _ timeout: TimeInterval) -> String?)?
 
     // MARK: - Init
 
@@ -59,13 +65,37 @@ public class HookServer: ObservableObject {
                 }
             }
 
-            l.newConnectionHandler = { connection in
+            // Capture weak self for the handler closure
+            l.newConnectionHandler = { [weak self] connection in
                 Self.handleConnection(connection) { event in
-                    Task { @MainActor [weak self] in
-                        return self?.onHookEvent?(event)
+                    guard let self = self else { return nil }
+
+                    // Phase 1: Call onHookEvent on MainActor to create pending request
+                    let semaphore = DispatchSemaphore(value: 0)
+                    var result: [String: Any]?
+
+                    Task { @MainActor in
+                        result = self.onHookEvent?(event)
+                        semaphore.signal()
                     }
-                    // Can't await here in sync callback, return default
-                    return nil
+
+                    let timeout = semaphore.wait(timeout: .now() + 5.0)
+                    if timeout == .timedOut {
+                        print("[HookServer] onHookEvent timed out")
+                        return nil
+                    }
+
+                    // Phase 2: If handler returned a pending request ID, wait for user decision
+                    if let requestId = result?["__waitForDecision"] as? String,
+                       let waitFn = self.onWaitForDecision {
+                        // This blocks the NW thread until user approves/denies (up to 30s)
+                        if let decision = waitFn(requestId, 30.0) {
+                            return ["permissionDecision": decision]
+                        }
+                        return ["permissionDecision": "ask"]
+                    }
+
+                    return result
                 }
             }
 
@@ -116,8 +146,8 @@ public class HookServer: ObservableObject {
                     return
                 }
 
-                // Call handler synchronously — for PreToolUse hooks we need a response
-                let response = handler(json) ?? ["permissionDecision": "ask"]
+                // Handler blocks via semaphore until MainActor responds
+                let response = handler(json) ?? ["permissionDecision": "ask"] as [String: Any]
                 if let responseData = try? JSONSerialization.data(withJSONObject: response),
                    let responseBody = String(data: responseData, encoding: .utf8) {
                     sendHTTPResponse(connection: connection, status: 200, body: responseBody)

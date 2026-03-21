@@ -30,15 +30,32 @@ struct ChiefOfAgentApp: App {
             }
         }
 
-        // Hook server receives events directly from Claude Code over HTTP
+        // Hook server receives Claude Code hook events over HTTP.
+        // For PreToolUse: creates a pending request in the menu bar,
+        // blocks the NW thread until user approves/denies, returns decision.
         server.onHookEvent = { event in
-            // For now, pass through to file-based state management
-            // The CLI hooks will write to state.json as before
-            // This server provides a fast path for future direct event handling
             let hookEvent = event["hookEvent"] as? String ?? ""
             let sessionId = event["sessionId"] as? String ?? ""
-            print("[HookServer] Received \(hookEvent) for session \(sessionId.prefix(8))...")
-            return ["permissionDecision": "ask"] as [String: Any]
+            print("[HookServer] Received \(hookEvent) for session \(String(sessionId.prefix(8)))...")
+
+            // Only PreToolUse events need permission decisions
+            guard hookEvent == "PreToolUse" else {
+                return [:] as [String: Any]
+            }
+
+            // Create pending request in the UI (runs on MainActor via onHookEvent)
+            let requestId = watcher.addHTTPPending(event: event)
+            guard let requestId = requestId else {
+                return ["permissionDecision": "ask"] as [String: Any]
+            }
+
+            // Return special marker — HookServer will call waitForHTTPDecision on NW thread
+            return ["__waitForDecision": requestId] as [String: Any]
+        }
+
+        // Wait handler runs on NW background thread — blocks until user decides
+        server.onWaitForDecision = { requestId, timeout in
+            watcher.waitForHTTPDecision(requestId: requestId, timeout: timeout)
         }
 
         watcher.start()

@@ -225,6 +225,12 @@ public class StateWatcher: ObservableObject {
         let payload = "{\"decision\":\"\(decision)\"}"
         try? payload.write(toFile: responsePath, atomically: true, encoding: .utf8)
 
+        // If this is an HTTP-origin pending request, resolve the continuation
+        if httpPendingDecisions[requestId] != nil {
+            resolveHTTPPending(requestId: requestId, decision: decision)
+            return
+        }
+
         // Optimistically remove from local state so UI updates immediately
         pendingRequests.removeAll { $0.requestId == requestId }
         // Reset mod date so we re-read pending.json after CLI removes the entry
@@ -242,6 +248,106 @@ public class StateWatcher: ObservableObject {
         }
         pendingRequests.removeAll { $0.requestId == requestId }
         removeStalePendingFromFile([requestId])
+    }
+
+    // MARK: - HTTP Pending Actions (via HookServer)
+
+    /// Continuations waiting for user decisions on HTTP-submitted pending requests.
+    /// Key: requestId, Value: semaphore + decision storage
+    private var httpPendingDecisions: [String: (semaphore: DispatchSemaphore, decision: String?)] = [:]
+
+    /// Creates a pending request from an HTTP hook event and blocks until the user
+    /// approves/denies via the menu bar UI. Returns the decision ("allow"/"deny") or
+    /// nil if timed out.
+    ///
+    /// Called from the HookServer's onHookEvent callback (on MainActor).
+    /// The HookServer's NW thread is separately blocked via its own semaphore.
+    public func addHTTPPending(event: [String: Any]) -> String? {
+        let requestId = UUID().uuidString
+        let tool = event["tool"] as? String ?? "Unknown"
+        let input = event["input"] as? [String: Any]
+        let detail: String
+        if let command = input?["command"] as? String {
+            detail = command
+        } else if let filePath = input?["file_path"] as? String {
+            detail = filePath
+        } else {
+            detail = String(describing: input ?? [:]).prefix(200).description
+        }
+
+        let sessionId = event["sessionId"] as? String ?? "unknown"
+        let project = event["project"] as? String ?? "unknown"
+
+        let formatter = ISO8601DateFormatter()
+        let request = PendingRequest(
+            requestId: requestId,
+            sessionId: sessionId,
+            project: project,
+            tool: tool,
+            detail: detail,
+            timestamp: formatter.string(from: Date()),
+            rule: "http-hook"
+        )
+
+        // Add to UI
+        pendingRequests.append(request)
+
+        // Create a semaphore for this request (will be signaled when user decides)
+        let semaphore = DispatchSemaphore(value: 0)
+        httpPendingDecisions[requestId] = (semaphore: semaphore, decision: nil)
+
+        return requestId
+    }
+
+    /// Called after the user clicks Approve/Deny on an HTTP-origin pending request.
+    /// Signals the waiting semaphore so the HookServer can return the response.
+    public func resolveHTTPPending(requestId: String, decision: String) {
+        if var entry = httpPendingDecisions[requestId] {
+            entry.decision = decision
+            httpPendingDecisions[requestId] = entry
+            entry.semaphore.signal()
+        }
+        pendingRequests.removeAll { $0.requestId == requestId }
+    }
+
+    /// Wait for the user decision on an HTTP pending request. Called from background thread.
+    /// Returns the decision or nil on timeout.
+    public nonisolated func waitForHTTPDecision(requestId: String, timeout: TimeInterval = 30) -> String? {
+        // We need to read from httpPendingDecisions which is MainActor-isolated.
+        // Get the semaphore synchronously via a bridging pattern.
+        let semaphore: DispatchSemaphore? = {
+            let s = DispatchSemaphore(value: 0)
+            var result: DispatchSemaphore?
+            Task { @MainActor in
+                result = self.httpPendingDecisions[requestId]?.semaphore
+                s.signal()
+            }
+            s.wait()
+            return result
+        }()
+
+        guard let semaphore = semaphore else { return nil }
+
+        let waitResult = semaphore.wait(timeout: .now() + timeout)
+        if waitResult == .timedOut {
+            // Clean up on timeout
+            Task { @MainActor in
+                self.httpPendingDecisions.removeValue(forKey: requestId)
+                self.pendingRequests.removeAll { $0.requestId == requestId }
+            }
+            return nil
+        }
+
+        // Read decision
+        let decisionSemaphore = DispatchSemaphore(value: 0)
+        var decision: String?
+        Task { @MainActor in
+            decision = self.httpPendingDecisions[requestId]?.decision
+            self.httpPendingDecisions.removeValue(forKey: requestId)
+            decisionSemaphore.signal()
+        }
+        decisionSemaphore.wait()
+        return decision
     }
 
     // MARK: - Stale Session Cleanup
