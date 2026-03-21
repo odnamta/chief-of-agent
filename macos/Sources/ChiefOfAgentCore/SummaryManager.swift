@@ -86,12 +86,22 @@ public class SummaryManager: ObservableObject {
             }
             fingerprints[sessionId] = hash
 
+            // Try local heuristic first (free, instant)
+            if let localSummary = LocalSummarizer.summarize(content: content, project: session.project) {
+                summaries[sessionId] = localSummary
+                continue
+            }
+
             sessionContents.append((id: sessionId, project: session.project, content: content))
         }
 
-        guard !sessionContents.isEmpty else { return }
+        // Only call API for sessions that local heuristics couldn't summarize
+        guard !sessionContents.isEmpty else {
+            saveCache()
+            return
+        }
 
-        // Batch summarize
+        // Batch summarize via API
         isSummarizing = true
         Task.detached { [weak self] in
             let results = await self?.batchSummarize(sessionContents) ?? [:]
