@@ -21,6 +21,9 @@ public class StateWatcher: ObservableObject {
     /// Callback fired when sessions dict changes (for summary refresh)
     public var onSessionsChanged: ((_ sessions: [String: SessionData]) -> Void)?
 
+    /// Callback fired when a session is removed from state.json (SessionEnd)
+    public var onSessionRemoved: ((_ sessionId: String, _ session: SessionData) -> Void)?
+
     // MARK: - File Watching
 
     private let stateFilePath: String
@@ -97,6 +100,13 @@ public class StateWatcher: ObservableObject {
             let oldStatus = previousStatuses[id]
             if session.status.isAttentionNeeded && oldStatus != session.status {
                 onTransition?(id, session, oldStatus)
+            }
+        }
+
+        // Detect removed sessions (SessionEnd)
+        for (id, session) in sessions {
+            if newSessions[id] == nil {
+                onSessionRemoved?(id, session)
             }
         }
 

@@ -34,6 +34,18 @@ struct ChiefOfAgentApp: App {
             }
         }
 
+        // Track closed sessions in history
+        watcher.onSessionRemoved = { sessionId, session in
+            Task { @MainActor in
+                store.addToHistory(
+                    sessionId: sessionId,
+                    project: session.project,
+                    cwd: session.cwd,
+                    summary: summarizer.summaries[sessionId]
+                )
+            }
+        }
+
         // Trigger summary refresh when sessions change
         watcher.onSessionsChanged = { sessions in
             Task { @MainActor in
