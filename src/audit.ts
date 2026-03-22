@@ -55,8 +55,10 @@ function maybeRotate(): void {
 
     // Rotate current file to .1
     fs.renameSync(AUDIT_PATH, `${AUDIT_PATH}.1`);
-  } catch {
-    // Rotation failure is non-fatal — don't block the decision chain
+  } catch (err) {
+    // Rotation failure is non-fatal — don't block the decision chain.
+    // But log it so users know the audit log may grow unbounded.
+    console.error(`[chief-of-agent] audit log rotation failed: ${err}`);
   }
 }
 

@@ -402,7 +402,8 @@ program
           rule: ruleResult.pattern,
         });
 
-        const decision = await pollForResponse(requestId);
+        // Short timeout for menu bar: if app isn't running, fall through to dashboard quickly
+        const decision = await pollForResponse(requestId, 15_000);
         removePendingRequest(requestId);
 
         const latency = Date.now() - startTime;

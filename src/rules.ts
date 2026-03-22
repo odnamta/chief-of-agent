@@ -63,7 +63,17 @@ export function loadPolicies(): Policy {
  * Compiles a rule pattern into a RegExp.
  * Returns null if pattern is malformed (logs a warning and skips it).
  */
+/**
+ * Max allowed pattern length to prevent catastrophic backtracking.
+ * Patterns longer than this are rejected as potentially malicious.
+ */
+const MAX_PATTERN_LENGTH = 500;
+
 function compilePattern(pattern: string): RegExp | null {
+  if (pattern.length > MAX_PATTERN_LENGTH) {
+    console.warn(`[chief-of-agent] Rule pattern too long (${pattern.length} chars, max ${MAX_PATTERN_LENGTH}) — skipped`);
+    return null;
+  }
   try {
     return new RegExp(pattern);
   } catch {

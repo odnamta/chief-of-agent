@@ -81,9 +81,16 @@ export class NotificationDispatcher {
           const escapedSubtitle = subtitle.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
           const escapedBody = body.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
           execFileSync('osascript', ['-e', `display notification "${escapedBody}" with title "Chief of Agent" subtitle "${escapedSubtitle}"`]);
-        } catch { /* silent */ }
+        } catch {
+          if (!this.notificationWarned) {
+            this.notificationWarned = true;
+            console.error('[chief-of-agent] notifications failed — neither terminal-notifier nor osascript worked. Install terminal-notifier for best experience.');
+          }
+        }
       }
     }
 
   }
+
+  private notificationWarned = false;
 }
