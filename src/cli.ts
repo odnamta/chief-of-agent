@@ -212,25 +212,9 @@ program
       installDashboardHook();
     }
 
+    let policiesPath: string | null = null;
     if (options.auto) {
-      const policiesPath = ensurePoliciesFile();
-      console.log('\n  Chief of Agent — Setup Complete\n');
-      console.log(`  Hooks: ${created ? 'created' : 'merged into'} ${settingsPath}`);
-      if (options.http) {
-        console.log('  HTTP hooks: PreToolUse + Session events → 127.0.0.1:19222 (macOS app)');
-      } else if (options.dashboard) {
-        console.log('  Dashboard hook: PreToolUse (Bash|Edit|Write) → localhost:3400');
-      }
-      console.log(`  Config: ${path.join(configDir, 'config.json')}`);
-      console.log(`  Policies: ${policiesPath} (default rules installed)`);
-      if (options.http) {
-        console.log('\n  HTTP hooks enabled. Make sure the macOS menu bar app is running.');
-      } else if (options.dashboard) {
-        console.log('\n  Control Tower + Smart Auto-Responder enabled.');
-        console.log('  Start the dashboard: cd dashboard && npm run dev');
-      }
-      console.log('\n  You\'re all set. Start Claude Code sessions and get notified!\n');
-      return;
+      policiesPath = ensurePoliciesFile();
     }
 
     const cfgPath = path.join(configDir, 'config.json');
@@ -239,20 +223,59 @@ program
       fs.writeFileSync(cfgPath, JSON.stringify(config, null, 2));
     }
 
-    console.log('\n  Chief of Agent — Setup Complete\n');
-    console.log(`  Hooks: ${created ? 'created' : 'merged into'} ${settingsPath}`);
-    if (options.http) {
-      console.log('  HTTP hooks: PreToolUse + Session events → 127.0.0.1:19222 (macOS app)');
-    } else if (options.dashboard) {
-      console.log('  Dashboard hook: PreToolUse (Bash|Edit|Write) → localhost:3400');
+    // Count rules if policies exist
+    const policiesFile = path.join(configDir, 'policies.json');
+    let ruleCount = 0;
+    if (fs.existsSync(policiesFile)) {
+      try {
+        const pol = JSON.parse(fs.readFileSync(policiesFile, 'utf-8'));
+        ruleCount = (pol.rules?.length ?? 0);
+      } catch { /* ignore */ }
     }
-    console.log(`  Config: ${cfgPath}`);
+
+    console.log('\n  ✓ Chief of Agent — Setup Complete\n');
+    console.log(`  Hooks:    ${created ? 'created' : 'updated'} ${settingsPath}`);
     if (options.http) {
-      console.log('\n  HTTP hooks enabled. Make sure the macOS menu bar app is running.');
+      console.log('  Mode:     HTTP hooks → 127.0.0.1:19222 (macOS menu bar app)');
     } else if (options.dashboard) {
-      console.log('\n  Control Tower enabled. Start the dashboard: cd dashboard && npm run dev');
+      console.log('  Mode:     Dashboard hooks → localhost:3400');
+    } else {
+      console.log('  Mode:     Notifications only (add --dashboard or --http for governance)');
     }
-    console.log('\n  You\'re all set. Start Claude Code sessions and get notified!\n');
+    console.log(`  Config:   ${cfgPath}`);
+    if (policiesPath) {
+      console.log(`  Policies: ${policiesPath} (${ruleCount} rules)`);
+    }
+
+    console.log('\n  ── Next Steps ──\n');
+
+    if (options.http) {
+      console.log('  1. Install the macOS menu bar app:');
+      console.log('     ./scripts/install-macos.sh\n');
+      console.log('  2. Launch "Chief of Agent" from ~/Applications\n');
+      console.log('  3. Start a Claude Code session:');
+      console.log('     claude\n');
+      console.log('  4. Watch pending actions appear in the menu bar\n');
+    } else if (options.dashboard) {
+      console.log('  1. Start the web dashboard:');
+      console.log('     cd dashboard && npm run dev\n');
+      console.log('  2. Open http://localhost:3400\n');
+      console.log('  3. Start a Claude Code session:');
+      console.log('     claude\n');
+      console.log('  4. Watch pending actions appear in the dashboard\n');
+    } else {
+      console.log('  1. Start a Claude Code session:');
+      console.log('     claude\n');
+      console.log('  2. You\'ll get macOS notifications when agents need attention\n');
+      console.log('  Tip: Run again with --dashboard or --http for approve/deny:\n');
+      console.log('     chief-of-agent setup --http --auto\n');
+    }
+
+    console.log('  ── Useful Commands ──\n');
+    console.log('  chief-of-agent status    — see all active sessions');
+    console.log('  chief-of-agent audit     — view decision log');
+    console.log('  chief-of-agent suggest   — get rule recommendations');
+    console.log('');
   });
 
 const configCmd = program
