@@ -6,6 +6,7 @@ struct MenuBarView: View {
     @ObservedObject var summaryManager: SummaryManager
     @ObservedObject var sessionStore: SessionStore
     @ObservedObject var decisionFeed: DecisionFeed
+    @ObservedObject var costTracker: CostTracker
     var hookServerRunning: Bool = false
     @State private var showSettings = false
     @State private var selectedIndex: Int? = nil
@@ -70,6 +71,13 @@ struct MenuBarView: View {
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
                     .background(Color.orange, in: Capsule())
+            }
+
+            // Cost ticker
+            if costTracker.totalCost > 0 {
+                Text(costTracker.formattedTotalCost)
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.green)
             }
 
             let count = stateWatcher.sessions.count
@@ -152,6 +160,7 @@ struct MenuBarView: View {
                         index: index,
                         isSelected: selectedIndex == index,
                         isSaved: sessionStore.isSaved(item.id),
+                        cost: costTracker.costs[item.id]?.formattedCost,
                         onSaveToggle: {
                             if sessionStore.isSaved(item.id) {
                                 sessionStore.unsave(sessionId: item.id)

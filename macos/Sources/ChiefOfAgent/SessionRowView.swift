@@ -8,6 +8,7 @@ struct SessionRowView: View {
     var index: Int = 0
     var isSelected: Bool = false
     var isSaved: Bool = false
+    var cost: String? = nil
     var onSaveToggle: (() -> Void)? = nil
     let onTap: () -> Void
 
@@ -43,6 +44,12 @@ struct SessionRowView: View {
                     Text(session.status.displayText)
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
+
+                    if let cost = cost {
+                        Text(cost)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(.green.opacity(0.7))
+                    }
 
                     Text(session.timeSinceLastEvent)
                         .font(.system(size: 11, design: .monospaced))

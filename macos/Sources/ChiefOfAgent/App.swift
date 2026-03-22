@@ -10,6 +10,7 @@ struct ChiefOfAgentApp: App {
     @StateObject private var sessionStore: SessionStore
     @StateObject private var hookServer: HookServer
     @StateObject private var decisionFeed: DecisionFeed
+    @StateObject private var costTracker: CostTracker
 
     init() {
         // Duplicate launch detection — if another instance is running, activate it and quit
@@ -29,6 +30,7 @@ struct ChiefOfAgentApp: App {
         let store = SessionStore()
         let server = HookServer()
         let decisions = DecisionFeed()
+        let costs = CostTracker()
 
         watcher.onTransition = { sessionId, session, from in
             Task { @MainActor in
@@ -48,11 +50,12 @@ struct ChiefOfAgentApp: App {
             }
         }
 
-        // Trigger summary refresh + decision feed poll when sessions change
+        // Trigger summary refresh + decision feed + cost tracking when sessions change
         watcher.onSessionsChanged = { sessions in
             Task { @MainActor in
                 summarizer.refreshIfNeeded(sessions: sessions)
                 decisions.poll()
+                costs.update(sessions: sessions)
             }
         }
 
@@ -96,11 +99,12 @@ struct ChiefOfAgentApp: App {
         _sessionStore = StateObject(wrappedValue: store)
         _hookServer = StateObject(wrappedValue: server)
         _decisionFeed = StateObject(wrappedValue: decisions)
+        _costTracker = StateObject(wrappedValue: costs)
     }
 
     var body: some Scene {
         MenuBarExtra {
-            MenuBarView(stateWatcher: stateWatcher, summaryManager: summaryManager, sessionStore: sessionStore, decisionFeed: decisionFeed, hookServerRunning: hookServer.isRunning)
+            MenuBarView(stateWatcher: stateWatcher, summaryManager: summaryManager, sessionStore: sessionStore, decisionFeed: decisionFeed, costTracker: costTracker, hookServerRunning: hookServer.isRunning)
         } label: {
             let pendingCount = stateWatcher.pendingRequests.count
             let attentionCount = stateWatcher.attentionCount
