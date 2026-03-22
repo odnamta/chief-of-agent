@@ -22,6 +22,9 @@ Agent governance platform for Claude Code CLI. Monitors sessions, enforces rules
 - `chief-of-agent audit` — view decision log
 - `chief-of-agent suggest` — analyze audit log and recommend new rules
 - `chief-of-agent respond` — 3-tier auto-responder (called by PreToolUse hook)
+- `chief-of-agent uninstall [--purge]` — remove hooks (and optionally config dir)
+- `chief-of-agent webhook add/list/remove/test` — manage webhook notifications
+- `chief-of-agent policy export/import/diff` — team policy sharing
 
 ## Architecture — CLI (src/)
 - `src/cli.ts` — CLI entry point (commander.js, 10+ commands)
@@ -34,6 +37,8 @@ Agent governance platform for Claude Code CLI. Monitors sessions, enforces rules
 - `src/rules.ts` — Rule engine (regex matching, first-match-wins)
 - `src/policies.ts` — 34 default rules (destructive deny list + safe allow list)
 - `src/audit.ts` — Append-only JSONL audit log with rotation + rule suggestion
+- `src/webhooks.ts` — Webhook notifications (Slack/Discord/custom, HMAC signing)
+- `src/policy-exchange.ts` — Policy export/import/diff for team sharing
 - `src/ai-classifier.ts` — Claude Haiku AI classifier (Tier 2, opt-in)
 
 ## Architecture — macOS Menu Bar App (macos/)
@@ -91,7 +96,7 @@ Agent governance platform for Claude Code CLI. Monitors sessions, enforces rules
 - HookServer binds to 127.0.0.1 only (localhost)
 
 ## Testing
-- TypeScript: vitest, 97 tests across 9 files (src/__tests__/)
+- TypeScript: vitest, 133 tests across 12 files (src/__tests__/)
 - Swift: swift-testing, 31 tests across 5 files (macos/Tests/)
 - Run single: `npx vitest run src/__tests__/parser.test.ts`
 - Run single: `cd macos && swift test --filter "PendingState"`
@@ -105,6 +110,8 @@ Agent governance platform for Claude Code CLI. Monitors sessions, enforces rules
 - `~/.chief-of-agent/audit.jsonl` — Decision audit log
 - `~/.chief-of-agent/summaries.json` — Cached AI summaries
 - `~/.chief-of-agent/saved_sessions.json` — Bookmarked sessions
+- `~/.chief-of-agent/webhooks.json` — Webhook endpoints config
+- `~/.chief-of-agent/decisions.jsonl` — Recent auto-decisions for menu bar
 
 ## Key Notes
 - macOS 14+ (Sonoma) required for menu bar app
