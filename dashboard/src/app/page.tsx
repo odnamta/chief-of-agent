@@ -5,6 +5,7 @@ import Header from '@/components/Header';
 import PendingCard from '@/components/PendingCard';
 import AgentGrid from '@/components/AgentGrid';
 import AutoDecisionFeed from '@/components/AutoDecisionFeed';
+import AuditHistory from '@/components/AuditHistory';
 import type { Decision, PendingRequest, SessionState, SessionCost, StateFile } from '@/lib/types';
 import type { AutoDecisionPayload } from '@/app/api/auto-decision/route';
 
@@ -158,6 +159,9 @@ export default function ControlTower() {
           </h2>
           <AgentGrid sessions={sessions} costs={costs} />
         </section>
+
+        {/* Audit History */}
+        <AuditHistory />
       </main>
     </div>
   );
