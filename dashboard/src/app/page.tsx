@@ -39,7 +39,11 @@ export default function ControlTower() {
 
   // Connect SSE for real-time pending + auto-decision updates
   useEffect(() => {
+    let mounted = true;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
     function connect() {
+      if (!mounted) return;
       const es = new EventSource('/api/events');
       esRef.current = es;
 
@@ -80,14 +84,16 @@ export default function ControlTower() {
         setConnected(false);
         es.close();
         esRef.current = null;
-        // Reconnect after 3 seconds
-        setTimeout(connect, 3000);
+        // Reconnect after 3 seconds (cancelled on unmount)
+        reconnectTimer = setTimeout(connect, 3000);
       };
     }
 
     connect();
 
     return () => {
+      mounted = false;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       esRef.current?.close();
       esRef.current = null;
     };

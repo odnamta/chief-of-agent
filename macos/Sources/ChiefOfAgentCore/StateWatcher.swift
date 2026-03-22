@@ -363,6 +363,12 @@ public class StateWatcher: ObservableObject {
     }
 
     /// Thread-safe box for passing values out of @Sendable closures.
+    ///
+    /// SAFETY CONTRACT: This type is `@unchecked Sendable` because its `value`
+    /// property is only written from one side of a DispatchSemaphore and read
+    /// from the other side after `semaphore.wait()` returns. The semaphore
+    /// provides the happens-before ordering that makes concurrent access safe.
+    /// DO NOT use this box without a semaphore serializing read/write access.
     private final class Box<T: Sendable>: @unchecked Sendable {
         var value: T?
     }
