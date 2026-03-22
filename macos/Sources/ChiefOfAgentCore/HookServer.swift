@@ -37,7 +37,11 @@ public class HookServer: ObservableObject {
         guard listener == nil else { return }
 
         let parameters = NWParameters.tcp
-        let nwPort = NWEndpoint.Port(rawValue: port)!
+
+        guard let nwPort = NWEndpoint.Port(rawValue: port) else {
+            print("[HookServer] Invalid port: \(port)")
+            return
+        }
 
         parameters.requiredLocalEndpoint = NWEndpoint.hostPort(
             host: NWEndpoint.Host("127.0.0.1"),

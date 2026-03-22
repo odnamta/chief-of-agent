@@ -522,7 +522,12 @@ async function handleDashboardTier(
     });
 
     const result = await response.json() as { decision?: string };
-    const decision = result.decision;
+    const decision = result?.decision;
+
+    if (!decision || (decision !== 'allow' && decision !== 'deny')) {
+      // "ask" or invalid → no output, Claude Code falls through to terminal prompt
+      process.exit(0);
+    }
 
     if (decision === 'allow' || decision === 'deny') {
       const latency = Date.now() - startTime;

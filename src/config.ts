@@ -41,7 +41,15 @@ export class ConfigManager {
     return { ...DEFAULTS, ...content, sounds: { ...DEFAULTS.sounds, ...(content.sounds || {}) } };
   }
 
+  private static readonly ALLOWED_KEYS = new Set([
+    'cooldown_seconds', 'quiet_hours', 'sound_enabled', 'notification_enabled',
+    'sounds', 'cost_alert_threshold',
+  ]);
+
   set(key: string, value: unknown): void {
+    if (!ConfigManager.ALLOWED_KEYS.has(key)) {
+      throw new Error(`Unknown config key: "${key}". Allowed: ${[...ConfigManager.ALLOWED_KEYS].join(', ')}`);
+    }
     const cfg = this.load();
     (cfg as unknown as Record<string, unknown>)[key] = value;
     if (!fs.existsSync(this.configDir)) {
