@@ -14,6 +14,13 @@ import { installHooks, installDashboardHook, installHTTPHook, uninstallHooks, en
 import { loadPolicies, matchRule } from './rules.js';
 import { classifyWithAI } from './ai-classifier.js';
 import { logAudit, readAudit, suggestRules } from './audit.js';
+import {
+  loadWebhooks as loadWebhooksConfig,
+  saveWebhooks as saveWebhooksConfig,
+  fireWebhooks,
+  testWebhook as testWebhookEndpoint,
+  type WebhookEventType,
+} from './webhooks.js';
 import { ensurePoliciesFile, writePolicies } from './policies.js';
 import { writePendingRequest, removePendingRequest, pollForResponse } from './pending.js';
 import type { AuditEntry } from './audit.js';
@@ -770,6 +777,20 @@ function broadcastAutoDecision(payload: Record<string, unknown>): void {
   // Write to file for menu bar app to read
   writeDecisionToFile(payload);
 
+  // Fire webhooks (Slack, Discord, custom)
+  fireWebhooks({
+    event: payload.decision === 'deny' ? 'deny' : 'allow',
+    timestamp: payload.timestamp as string ?? new Date().toISOString(),
+    project: payload.project as string ?? 'unknown',
+    tool: payload.tool as string,
+    detail: payload.detail as string,
+    decision: payload.decision as 'allow' | 'deny',
+    tier: payload.tier as 'rule' | 'ai' | 'dashboard',
+    rule: payload.rule as string | undefined,
+    reason: payload.reason as string | undefined,
+    machine: os.hostname(),
+  });
+
   // Broadcast to dashboard via HTTP (fire-and-forget)
   fetch('http://localhost:3400/api/auto-decision', {
     method: 'POST',
@@ -817,5 +838,87 @@ function promptUser(question: string): Promise<string> {
     });
   });
 }
+
+// ─────────────────────────────────────────────
+// webhook commands
+// ─────────────────────────────────────────────
+
+const webhookCmd = program
+  .command('webhook')
+  .description('Manage webhook notifications (Slack, Discord, custom)');
+
+webhookCmd
+  .command('add <url>')
+  .description('Add a webhook endpoint')
+  .option('--name <name>', 'Human-readable label')
+  .option('--events <events>', 'Comma-separated events: deny,allow,pending,error,cost_alert', 'deny,error,cost_alert')
+  .option('--format <format>', 'Payload format: slack, discord, raw', 'raw')
+  .option('--secret <secret>', 'HMAC-SHA256 signing secret')
+  .action((url: string, opts: { name?: string; events: string; format: string; secret?: string }) => {
+    const config = loadWebhooksConfig();
+    config.webhooks.push({
+      url,
+      name: opts.name,
+      events: opts.events.split(',').map(e => e.trim()) as WebhookEventType[],
+      format: opts.format as 'slack' | 'discord' | 'raw',
+      secret: opts.secret,
+      enabled: true,
+    });
+    saveWebhooksConfig(config);
+    console.log(`\n  ✓ Webhook added: ${opts.name || url}\n  Events: ${opts.events}\n  Format: ${opts.format}\n`);
+  });
+
+webhookCmd
+  .command('list')
+  .description('List configured webhooks')
+  .action(() => {
+    const config = loadWebhooksConfig();
+    if (config.webhooks.length === 0) {
+      console.log('\n  No webhooks configured. Add one:\n  chief-of-agent webhook add <url> --format slack\n');
+      return;
+    }
+    console.log(`\n  Webhooks (${config.webhooks.length}):\n`);
+    config.webhooks.forEach((w, i) => {
+      const status = w.enabled === false ? '○ disabled' : '● active';
+      const masked = w.url.length > 40 ? w.url.slice(0, 40) + '...' : w.url;
+      console.log(`  [${i}] ${status}  ${w.name || '(unnamed)'}  ${masked}`);
+      console.log(`      Events: ${w.events.join(', ')}  Format: ${w.format || 'raw'}`);
+    });
+    console.log('');
+  });
+
+webhookCmd
+  .command('remove <index>')
+  .description('Remove a webhook by index')
+  .action((indexStr: string) => {
+    const config = loadWebhooksConfig();
+    const index = parseInt(indexStr, 10);
+    if (isNaN(index) || index < 0 || index >= config.webhooks.length) {
+      console.log(`\n  Invalid index. Use 'chief-of-agent webhook list' to see indices.\n`);
+      return;
+    }
+    const removed = config.webhooks.splice(index, 1)[0];
+    saveWebhooksConfig(config);
+    console.log(`\n  ✓ Removed webhook: ${removed.name || removed.url}\n`);
+  });
+
+webhookCmd
+  .command('test <index>')
+  .description('Send a test payload to a webhook')
+  .action(async (indexStr: string) => {
+    const config = loadWebhooksConfig();
+    const index = parseInt(indexStr, 10);
+    if (isNaN(index) || index < 0 || index >= config.webhooks.length) {
+      console.log(`\n  Invalid index. Use 'chief-of-agent webhook list' to see indices.\n`);
+      return;
+    }
+    console.log(`\n  Sending test payload to [${index}]...`);
+    const result = await testWebhookEndpoint(config.webhooks[index]);
+    if (result.ok) {
+      console.log(`  ✓ Success (HTTP ${result.status})\n`);
+    } else {
+      console.log(`  ✗ Failed (HTTP ${result.status})${result.error ? `: ${result.error}` : ''}\n`);
+    }
+  });
 
 program.parse();
