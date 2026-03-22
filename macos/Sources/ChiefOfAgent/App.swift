@@ -50,6 +50,18 @@ struct ChiefOfAgentApp: App {
             }
         }
 
+        // Cost alert: fire notification when a session exceeds threshold
+        costs.onCostAlert = { sessionId, project, cost in
+            let content = UNMutableNotificationContent()
+            content.title = "Chief of Agent — Cost Alert"
+            content.subtitle = "\(project) has used $\(String(format: "%.2f", cost))"
+            content.body = "Session \(String(sessionId.prefix(8))) exceeded the $\(String(format: "%.0f", costs.alertThreshold)) threshold."
+            content.sound = .default
+            content.threadIdentifier = "chief-of-agent-cost"
+            let request = UNNotificationRequest(identifier: "cost-\(sessionId)", content: content, trigger: nil)
+            UNUserNotificationCenter.current().add(request)
+        }
+
         // Trigger summary refresh + decision feed + cost tracking when sessions change
         watcher.onSessionsChanged = { sessions in
             Task { @MainActor in

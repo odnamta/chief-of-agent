@@ -39,6 +39,15 @@ public class CostTracker: ObservableObject {
     private static let cacheReadPricePer1M: Double = 1.5
     private static let cacheWritePricePer1M: Double = 18.75
 
+    /// Cost threshold for alert (default: $5). Fires once per session when exceeded.
+    public var alertThreshold: Double = 5.0
+
+    /// Callback fired when a session exceeds the cost threshold.
+    public var onCostAlert: ((_ sessionId: String, _ project: String, _ cost: Double) -> Void)?
+
+    /// Sessions that have already triggered an alert (don't repeat)
+    private var alertedSessions: Set<String> = []
+
     private let cachePath: String
     private var lastScanTime: Date?
     private let scanInterval: TimeInterval = 60 // 1 minute
@@ -69,6 +78,12 @@ public class CostTracker: ObservableObject {
             if let jsonlPath = findJSONLPath(sessionId: sessionId, cwd: session.cwd) {
                 let cost = parseTokenUsage(sessionId: sessionId, from: jsonlPath)
                 costs[sessionId] = cost
+
+                // Fire alert if threshold exceeded (once per session)
+                if cost.estimatedCostUSD >= alertThreshold && !alertedSessions.contains(sessionId) {
+                    alertedSessions.insert(sessionId)
+                    onCostAlert?(sessionId, session.project, cost.estimatedCostUSD)
+                }
             }
         }
 
