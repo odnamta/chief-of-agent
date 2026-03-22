@@ -62,6 +62,19 @@ public class CostTracker: ObservableObject {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         self.cachePath = "\(home)/.chief-of-agent/costs.json"
         loadCache()
+        loadThresholdFromConfig()
+    }
+
+    /// Read cost_alert_threshold from config.json (written by CLI).
+    private func loadThresholdFromConfig() {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let configPath = "\(home)/.chief-of-agent/config.json"
+        guard let data = FileManager.default.contents(atPath: configPath),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let threshold = json["cost_alert_threshold"] as? Double else {
+            return
+        }
+        alertThreshold = threshold
     }
 
     /// Update costs for active sessions. Pass current sessions from StateWatcher.

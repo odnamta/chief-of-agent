@@ -7,6 +7,7 @@ export interface Config {
   quiet_hours: { start: string; end: string };
   sound_enabled: boolean;
   notification_enabled: boolean;
+  cost_alert_threshold: number;
 }
 
 const DEFAULTS: Config = {
@@ -20,6 +21,7 @@ const DEFAULTS: Config = {
   quiet_hours: { start: '23:00', end: '07:00' },
   sound_enabled: true,
   notification_enabled: true,
+  cost_alert_threshold: 5,
 };
 
 export class ConfigManager {

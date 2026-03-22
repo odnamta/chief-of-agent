@@ -31,6 +31,7 @@ describe('NotificationDispatcher', () => {
       quiet_hours: { start: '03:00', end: '04:00' },
       sound_enabled: true,
       notification_enabled: true,
+      cost_alert_threshold: 5,
     }, cooldownPath);
   });
 
@@ -98,7 +99,7 @@ describe('NotificationDispatcher', () => {
     dispatcher = new NotificationDispatcher({
       sounds: { permission: '/System/Library/Sounds/Ping.aiff', error: '/System/Library/Sounds/Basso.aiff', stop: '/System/Library/Sounds/Glass.aiff', idle: '/System/Library/Sounds/Ping.aiff' },
       cooldown_seconds: 10, quiet_hours: { start: '03:00', end: '04:00' },
-      sound_enabled: false, notification_enabled: true,
+      sound_enabled: false, notification_enabled: true, cost_alert_threshold: 5,
     }, cooldownPath);
     dispatcher.dispatch({ sessionId: 'abc', eventType: 'error', project: 'proj', cwd: '/path', raw: {} });
     const afplayCalls = (execFileSync as ReturnType<typeof vi.fn>).mock.calls.filter((c: unknown[]) => c[0] === 'afplay');

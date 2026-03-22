@@ -68,6 +68,41 @@ export function installHooks(): { settingsPath: string; created: boolean } {
   return { settingsPath, created };
 }
 
+/**
+ * Removes all Chief of Agent hooks from ~/.claude/settings.json.
+ * Preserves other hooks and settings.
+ */
+export function uninstallHooks(): { settingsPath: string; removed: number } {
+  const claudeDir = path.join(os.homedir(), '.claude');
+  const settingsPath = path.join(claudeDir, 'settings.json');
+
+  if (!fs.existsSync(settingsPath)) {
+    return { settingsPath, removed: 0 };
+  }
+
+  const existing = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+  const hooks = (existing.hooks || {}) as HooksConfig;
+  let removed = 0;
+
+  const cleaned: HooksConfig = {};
+  for (const [eventName, entries] of Object.entries(hooks)) {
+    const filtered = entries.filter((e) => {
+      if (isChiefOfAgentHook(e)) {
+        removed++;
+        return false;
+      }
+      return true;
+    });
+    if (filtered.length > 0) {
+      cleaned[eventName] = filtered;
+    }
+  }
+
+  const result = { ...existing, hooks: cleaned };
+  fs.writeFileSync(settingsPath, JSON.stringify(result, null, 2));
+  return { settingsPath, removed };
+}
+
 export function ensureConfigDir(): string {
   const configDir = path.join(os.homedir(), '.chief-of-agent');
   if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });

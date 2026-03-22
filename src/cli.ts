@@ -10,7 +10,7 @@ import { parseHookInput } from './parser.js';
 import { StateManager } from './state.js';
 import { ConfigManager } from './config.js';
 import { NotificationDispatcher } from './notify.js';
-import { installHooks, installDashboardHook, installHTTPHook, ensureConfigDir } from './setup.js';
+import { installHooks, installDashboardHook, installHTTPHook, uninstallHooks, ensureConfigDir } from './setup.js';
 import { loadPolicies, matchRule } from './rules.js';
 import { classifyWithAI } from './ai-classifier.js';
 import { logAudit, readAudit, suggestRules } from './audit.js';
@@ -276,6 +276,30 @@ program
     console.log('  chief-of-agent audit     — view decision log');
     console.log('  chief-of-agent suggest   — get rule recommendations');
     console.log('');
+  });
+
+program
+  .command('uninstall')
+  .description('Remove all Chief of Agent hooks from ~/.claude/settings.json')
+  .option('--purge', 'Also remove ~/.chief-of-agent/ config directory')
+  .action((options: { purge?: boolean }) => {
+    const { settingsPath, removed } = uninstallHooks();
+
+    if (removed === 0) {
+      console.log('\n  No Chief of Agent hooks found in settings.json.\n');
+    } else {
+      console.log(`\n  Removed ${removed} hook(s) from ${settingsPath}\n`);
+    }
+
+    if (options.purge) {
+      const configDir = path.join(os.homedir(), '.chief-of-agent');
+      if (fs.existsSync(configDir)) {
+        fs.rmSync(configDir, { recursive: true, force: true });
+        console.log(`  Removed config directory: ${configDir}\n`);
+      }
+    }
+
+    console.log('  Chief of Agent has been uninstalled. Hooks removed, Claude Code unaffected.\n');
   });
 
 const configCmd = program
