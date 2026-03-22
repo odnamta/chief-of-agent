@@ -51,12 +51,13 @@ public class StateWatcher: ObservableObject {
         poll()
         pollPending()
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            guard let watcher = self else { return }
             Task { @MainActor in
-                guard let self = self, !self.isPolling else { return }
-                self.isPolling = true
-                self.poll()
-                self.pollPending()
-                self.isPolling = false
+                guard !watcher.isPolling else { return }
+                watcher.isPolling = true
+                watcher.poll()
+                watcher.pollPending()
+                watcher.isPolling = false
             }
         }
     }
@@ -325,15 +326,16 @@ public class StateWatcher: ObservableObject {
     public nonisolated func waitForHTTPDecision(requestId: String, timeout: TimeInterval = 30) -> String? {
         // We need to read from httpPendingDecisions which is MainActor-isolated.
         // Get the semaphore synchronously via a bridging pattern.
+        // Using Box to avoid capturing mutable vars in @Sendable Task closures.
         let semaphore: DispatchSemaphore? = {
             let s = DispatchSemaphore(value: 0)
-            var result: DispatchSemaphore?
+            let resultBox = Box<DispatchSemaphore>()
             Task { @MainActor in
-                result = self.httpPendingDecisions[requestId]?.semaphore
+                resultBox.value = self.httpPendingDecisions[requestId]?.semaphore
                 s.signal()
             }
             s.wait()
-            return result
+            return resultBox.value
         }()
 
         guard let semaphore = semaphore else { return nil }
@@ -350,14 +352,19 @@ public class StateWatcher: ObservableObject {
 
         // Read decision
         let decisionSemaphore = DispatchSemaphore(value: 0)
-        var decision: String?
+        let decisionBox = Box<String>()
         Task { @MainActor in
-            decision = self.httpPendingDecisions[requestId]?.decision
+            decisionBox.value = self.httpPendingDecisions[requestId]?.decision
             self.httpPendingDecisions.removeValue(forKey: requestId)
             decisionSemaphore.signal()
         }
         decisionSemaphore.wait()
-        return decision
+        return decisionBox.value
+    }
+
+    /// Thread-safe box for passing values out of @Sendable closures.
+    private final class Box<T: Sendable>: @unchecked Sendable {
+        var value: T?
     }
 
     // MARK: - Stale Session Cleanup

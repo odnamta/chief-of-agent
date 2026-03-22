@@ -46,8 +46,9 @@ public class SummaryManager: ObservableObject {
 
     public func start() {
         timer = Timer.scheduledTimer(withTimeInterval: refreshInterval, repeats: true) { [weak self] _ in
+            guard let manager = self else { return }
             Task { @MainActor in
-                self?.refreshIfNeeded(sessions: [:])
+                manager.refreshIfNeeded(sessions: [:])
             }
         }
     }
@@ -103,14 +104,16 @@ public class SummaryManager: ObservableObject {
 
         // Batch summarize via API
         isSummarizing = true
+        let contentsSnapshot = sessionContents
         Task.detached { [weak self] in
-            let results = await self?.batchSummarize(sessionContents) ?? [:]
+            guard let manager = self else { return }
+            let results = await manager.batchSummarize(contentsSnapshot)
             await MainActor.run {
-                self?.isSummarizing = false
+                manager.isSummarizing = false
                 for (id, summary) in results {
-                    self?.summaries[id] = summary
+                    manager.summaries[id] = summary
                 }
-                self?.saveCache()
+                manager.saveCache()
             }
         }
     }
