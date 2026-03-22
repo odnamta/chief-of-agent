@@ -14,6 +14,7 @@ import { installHooks, installDashboardHook, installHTTPHook, uninstallHooks, en
 import { loadPolicies, matchRule } from './rules.js';
 import { classifyWithAI } from './ai-classifier.js';
 import { logAudit, readAudit, suggestRules } from './audit.js';
+import { exportPolicies, importPolicies, diffPolicies } from './policy-exchange.js';
 import {
   loadWebhooks as loadWebhooksConfig,
   saveWebhooks as saveWebhooksConfig,
@@ -838,6 +839,95 @@ function promptUser(question: string): Promise<string> {
     });
   });
 }
+
+// ─────────────────────────────────────────────
+// policy commands
+// ─────────────────────────────────────────────
+
+const policyCmd = program
+  .command('policy')
+  .description('Export, import, and diff policy files for team sharing');
+
+policyCmd
+  .command('export')
+  .description('Export current policies with metadata')
+  .option('-o, --output <path>', 'Output file path')
+  .action((opts: { output?: string }) => {
+    try {
+      const { path: outPath, ruleCount } = exportPolicies(opts.output);
+      console.log(`\n  ✓ Exported ${ruleCount} rules to ${outPath}\n`);
+    } catch (err) {
+      console.error(`\n  ✗ Export failed: ${err}\n`);
+    }
+  });
+
+policyCmd
+  .command('import <file>')
+  .description('Import policies from a file')
+  .option('--replace', 'Replace all local rules (default: merge)')
+  .option('--dry-run', 'Show what would change without applying')
+  .action((file: string, opts: { replace?: boolean; dryRun?: boolean }) => {
+    try {
+      const mode = opts.replace ? 'replace' : 'merge';
+      const result = importPolicies(file, mode, opts.dryRun);
+
+      if (opts.dryRun) {
+        console.log('\n  ── Dry Run (no changes applied) ──\n');
+      } else {
+        console.log('\n  ✓ Policies imported\n');
+      }
+
+      console.log(`  Mode:      ${mode}`);
+      console.log(`  Added:     ${result.added} rules`);
+      console.log(`  Updated:   ${result.updated} rules`);
+      console.log(`  Unchanged: ${result.unchanged} rules`);
+      console.log(`  Locked:    ${result.locked} rules`);
+      console.log(`  Total:     ${result.total} rules\n`);
+    } catch (err) {
+      console.error(`\n  ✗ Import failed: ${err}\n`);
+    }
+  });
+
+policyCmd
+  .command('diff <file>')
+  .description('Show differences between local and imported policies')
+  .action((file: string) => {
+    try {
+      const diff = diffPolicies(file);
+
+      console.log('\n  ── Policy Diff ──\n');
+
+      if (diff.added.length === 0 && diff.removed.length === 0 && diff.changed.length === 0) {
+        console.log('  No differences. Policies are identical.\n');
+        return;
+      }
+
+      if (diff.added.length > 0) {
+        console.log(`  Added (${diff.added.length}):`);
+        for (const r of diff.added) {
+          console.log(`    + [${r.action}] ${r.tool}: ${r.pattern}`);
+        }
+      }
+
+      if (diff.changed.length > 0) {
+        console.log(`  Changed (${diff.changed.length}):`);
+        for (const c of diff.changed) {
+          console.log(`    ~ ${c.rule.tool}: ${c.rule.pattern} (${c.localAction} → ${c.importedAction})`);
+        }
+      }
+
+      if (diff.removed.length > 0) {
+        console.log(`  Local only (${diff.removed.length}):`);
+        for (const r of diff.removed) {
+          console.log(`    - [${r.action}] ${r.tool}: ${r.pattern}`);
+        }
+      }
+
+      console.log(`\n  Unchanged: ${diff.unchanged}\n`);
+    } catch (err) {
+      console.error(`\n  ✗ Diff failed: ${err}\n`);
+    }
+  });
 
 // ─────────────────────────────────────────────
 // webhook commands
