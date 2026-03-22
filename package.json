@@ -1,6 +1,6 @@
 {
   "name": "chief-of-agent",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "description": "Agent attention manager for Claude Code CLI — know which agent needs you",
   "type": "module",
   "bin": {

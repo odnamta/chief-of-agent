@@ -7,6 +7,27 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.0.0] - 2026-03-22
+
+### Production Release
+
+Chief of Agent is production-ready. 72 commits, 138 tests, 3 platforms.
+
+### Hardened (since 0.3.0)
+
+- **Fix:** Explicit early exit on null dashboard decision (prevent silent fallthrough)
+- **Fix:** Remove forced unwrap on HookServer port binding (prevent crash)
+- **Fix:** Config key whitelist prevents arbitrary injection via `config set`
+- **Fix:** SSE reconnect timer cancelled on component unmount (prevent memory leak)
+- **Fix:** Deny-rule pending timeout reduced from 120s to 15s (fast fallback to dashboard)
+- **Security:** Regex DoS guard — patterns >500 chars rejected
+- **Observability:** Log audit rotation failures, warn-once on notification mechanism failures
+- **Tests:** 10 new respond pipeline integration tests (rule matching, pending round-trip, audit, regex guard)
+- **Docs:** Sendable safety contract documented on Box<T> in StateWatcher
+- **Swift 6:** Sendable compliance in timer/task closures (Box pattern, named captures)
+
+---
+
 ## [0.3.0] - 2026-03-21
 
 ### Added — Phase 4: Agent Governance
