@@ -9,6 +9,7 @@ struct ChiefOfAgentApp: App {
     @StateObject private var summaryManager: SummaryManager
     @StateObject private var sessionStore: SessionStore
     @StateObject private var hookServer: HookServer
+    @StateObject private var decisionFeed: DecisionFeed
 
     init() {
         // Duplicate launch detection — if another instance is running, activate it and quit
@@ -27,6 +28,7 @@ struct ChiefOfAgentApp: App {
         let summarizer = SummaryManager()
         let store = SessionStore()
         let server = HookServer()
+        let decisions = DecisionFeed()
 
         watcher.onTransition = { sessionId, session, from in
             Task { @MainActor in
@@ -46,10 +48,11 @@ struct ChiefOfAgentApp: App {
             }
         }
 
-        // Trigger summary refresh when sessions change
+        // Trigger summary refresh + decision feed poll when sessions change
         watcher.onSessionsChanged = { sessions in
             Task { @MainActor in
                 summarizer.refreshIfNeeded(sessions: sessions)
+                decisions.poll()
             }
         }
 
@@ -92,11 +95,12 @@ struct ChiefOfAgentApp: App {
         _summaryManager = StateObject(wrappedValue: summarizer)
         _sessionStore = StateObject(wrappedValue: store)
         _hookServer = StateObject(wrappedValue: server)
+        _decisionFeed = StateObject(wrappedValue: decisions)
     }
 
     var body: some Scene {
         MenuBarExtra {
-            MenuBarView(stateWatcher: stateWatcher, summaryManager: summaryManager, sessionStore: sessionStore, hookServerRunning: hookServer.isRunning)
+            MenuBarView(stateWatcher: stateWatcher, summaryManager: summaryManager, sessionStore: sessionStore, decisionFeed: decisionFeed, hookServerRunning: hookServer.isRunning)
         } label: {
             let pendingCount = stateWatcher.pendingRequests.count
             let attentionCount = stateWatcher.attentionCount

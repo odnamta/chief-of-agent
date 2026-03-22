@@ -5,6 +5,7 @@ struct MenuBarView: View {
     @ObservedObject var stateWatcher: StateWatcher
     @ObservedObject var summaryManager: SummaryManager
     @ObservedObject var sessionStore: SessionStore
+    @ObservedObject var decisionFeed: DecisionFeed
     var hookServerRunning: Bool = false
     @State private var showSettings = false
     @State private var selectedIndex: Int? = nil
@@ -33,6 +34,12 @@ struct MenuBarView: View {
             if !sessionStore.savedSessions.isEmpty {
                 Divider()
                 savedSection
+            }
+
+            // Recent auto-decisions
+            if !decisionFeed.recent.isEmpty {
+                Divider()
+                decisionSection
             }
 
             Divider()
@@ -236,6 +243,68 @@ struct MenuBarView: View {
                 }
             }
             .frame(maxHeight: 160)
+        }
+    }
+
+    // MARK: - Recent Auto-Decisions
+
+    private var decisionSection: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.blue)
+                Text("RECENT DECISIONS")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.blue)
+                Spacer()
+                Text("\(decisionFeed.recent.count)")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
+
+            ScrollView {
+                VStack(spacing: 2) {
+                    ForEach(decisionFeed.recent) { d in
+                        HStack(spacing: 6) {
+                            // Allow/Deny badge
+                            Text(d.decision.uppercased())
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(
+                                    d.decision == "allow" ? Color.green.opacity(0.7) : Color.red.opacity(0.7),
+                                    in: RoundedRectangle(cornerRadius: 3)
+                                )
+
+                            // Tool
+                            Text(d.tool)
+                                .font(.system(size: 10, weight: .medium))
+                                .lineLimit(1)
+
+                            // Detail (truncated)
+                            Text(String(d.detail.prefix(30)))
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+
+                            Spacer()
+
+                            // Latency
+                            Text("\(d.latencyMs)ms")
+                                .font(.system(size: 9, design: .monospaced))
+                                .foregroundStyle(.quaternary)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 3)
+                    }
+                }
+            }
+            .frame(maxHeight: 120)
         }
     }
 

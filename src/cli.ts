@@ -651,6 +651,10 @@ function timeSince(date: Date): string {
  * Broadcasts an auto-decision to the dashboard (fire-and-forget, 2s timeout).
  */
 function broadcastAutoDecision(payload: Record<string, unknown>): void {
+  // Write to file for menu bar app to read
+  writeDecisionToFile(payload);
+
+  // Broadcast to dashboard via HTTP (fire-and-forget)
   fetch('http://localhost:3400/api/auto-decision', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -659,6 +663,30 @@ function broadcastAutoDecision(payload: Record<string, unknown>): void {
   }).catch(() => {
     // Dashboard not running — silently ignore
   });
+}
+
+const DECISIONS_PATH = path.join(os.homedir(), '.chief-of-agent', 'decisions.jsonl');
+const MAX_DECISIONS = 50;
+
+function writeDecisionToFile(payload: Record<string, unknown>): void {
+  try {
+    const line = JSON.stringify(payload) + '\n';
+    const configDir = path.join(os.homedir(), '.chief-of-agent');
+    if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
+
+    fs.appendFileSync(DECISIONS_PATH, line, 'utf-8');
+
+    // Trim to last MAX_DECISIONS lines periodically
+    const stat = fs.statSync(DECISIONS_PATH);
+    if (stat.size > 100_000) { // ~100KB, trim
+      const content = fs.readFileSync(DECISIONS_PATH, 'utf-8');
+      const lines = content.trim().split('\n');
+      const trimmed = lines.slice(-MAX_DECISIONS).join('\n') + '\n';
+      fs.writeFileSync(DECISIONS_PATH, trimmed, 'utf-8');
+    }
+  } catch {
+    // Non-critical — don't break the respond flow
+  }
 }
 
 /**
