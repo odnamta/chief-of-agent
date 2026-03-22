@@ -3,9 +3,10 @@
 interface HeaderProps {
   agentCount: number;
   pendingCount: number;
+  totalCost?: number;
 }
 
-export default function Header({ agentCount, pendingCount }: HeaderProps) {
+export default function Header({ agentCount, pendingCount, totalCost }: HeaderProps) {
   return (
     <header className="border-b border-zinc-800 bg-zinc-900/80 backdrop-blur-sm sticky top-0 z-10">
       <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
@@ -26,6 +27,11 @@ export default function Header({ agentCount, pendingCount }: HeaderProps) {
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-400" />
               </span>
               {pendingCount} pending
+            </span>
+          )}
+          {totalCost != null && totalCost > 0 && (
+            <span className="text-emerald-400 font-mono text-xs font-medium">
+              ${totalCost.toFixed(2)}
             </span>
           )}
           <span className="text-zinc-400">

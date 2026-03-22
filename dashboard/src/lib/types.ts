@@ -29,6 +29,16 @@ export interface SessionState {
 
 export interface StateFile {
   sessions: Record<string, SessionState>;
+  costs?: Record<string, SessionCost>;
+}
+
+export interface SessionCost {
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  apiCalls?: number;
+  estimatedCostUSD?: number;
 }
 
 // SSE event types

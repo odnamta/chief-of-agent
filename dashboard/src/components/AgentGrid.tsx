@@ -1,9 +1,10 @@
 'use client';
 
-import type { SessionState } from '@/lib/types';
+import type { SessionState, SessionCost } from '@/lib/types';
 
 interface AgentGridProps {
   sessions: Record<string, SessionState>;
+  costs?: Record<string, SessionCost>;
 }
 
 const STATUS_DOT: Record<string, string> = {
@@ -31,7 +32,7 @@ function timeSince(dateStr: string): string {
   return `${hours}h ago`;
 }
 
-export default function AgentGrid({ sessions }: AgentGridProps) {
+export default function AgentGrid({ sessions, costs }: AgentGridProps) {
   const entries = Object.entries(sessions);
 
   if (entries.length === 0) {
@@ -63,7 +64,14 @@ export default function AgentGrid({ sessions }: AgentGridProps) {
                   <div className="text-xs text-zinc-500 mt-0.5 font-mono">{shortId}</div>
                 </div>
               </div>
-              <span className="text-xs text-zinc-500 mt-0.5">{timeSince(session.last_event_at)}</span>
+              <div className="flex items-center gap-2 mt-0.5">
+                {costs?.[id]?.estimatedCostUSD != null && costs[id].estimatedCostUSD! > 0 && (
+                  <span className="text-xs font-mono text-emerald-400">
+                    ${costs[id].estimatedCostUSD!.toFixed(2)}
+                  </span>
+                )}
+                <span className="text-xs text-zinc-500">{timeSince(session.last_event_at)}</span>
+              </div>
             </div>
 
             <div className="mt-3 flex items-center gap-2">

@@ -11,18 +11,27 @@ import type { StateFile } from '@/lib/types';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const STATE_PATH = path.join(os.homedir(), '.chief-of-agent', 'state.json');
+const CONFIG_DIR = path.join(os.homedir(), '.chief-of-agent');
+const STATE_PATH = path.join(CONFIG_DIR, 'state.json');
+const COSTS_PATH = path.join(CONFIG_DIR, 'costs.json');
 
 export async function GET() {
   try {
-    if (!fs.existsSync(STATE_PATH)) {
-      return NextResponse.json({ sessions: {} } satisfies StateFile);
+    let state: StateFile = { sessions: {} };
+    if (fs.existsSync(STATE_PATH)) {
+      state = JSON.parse(fs.readFileSync(STATE_PATH, 'utf-8')) as StateFile;
     }
 
-    const content = fs.readFileSync(STATE_PATH, 'utf-8');
-    const state = JSON.parse(content) as StateFile;
-    return NextResponse.json(state);
+    // Read costs and merge into response
+    let costs: Record<string, { estimatedCostUSD?: number }> = {};
+    if (fs.existsSync(COSTS_PATH)) {
+      try {
+        costs = JSON.parse(fs.readFileSync(COSTS_PATH, 'utf-8'));
+      } catch { /* ignore malformed costs */ }
+    }
+
+    return NextResponse.json({ ...state, costs });
   } catch {
-    return NextResponse.json({ sessions: {} } satisfies StateFile);
+    return NextResponse.json({ sessions: {}, costs: {} });
   }
 }

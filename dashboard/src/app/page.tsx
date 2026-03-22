@@ -5,12 +5,13 @@ import Header from '@/components/Header';
 import PendingCard from '@/components/PendingCard';
 import AgentGrid from '@/components/AgentGrid';
 import AutoDecisionFeed from '@/components/AutoDecisionFeed';
-import type { Decision, PendingRequest, SessionState, StateFile } from '@/lib/types';
+import type { Decision, PendingRequest, SessionState, SessionCost, StateFile } from '@/lib/types';
 import type { AutoDecisionPayload } from '@/app/api/auto-decision/route';
 
 export default function ControlTower() {
   const [pending, setPending] = useState<PendingRequest[]>([]);
   const [sessions, setSessions] = useState<Record<string, SessionState>>({});
+  const [costs, setCosts] = useState<Record<string, SessionCost>>({});
   const [connected, setConnected] = useState(false);
   const [autoDecisions, setAutoDecisions] = useState<AutoDecisionPayload[]>([]);
   const esRef = useRef<EventSource | null>(null);
@@ -20,8 +21,9 @@ export default function ControlTower() {
     try {
       const res = await fetch('/api/sessions');
       if (res.ok) {
-        const data: StateFile = await res.json();
+        const data = await res.json() as StateFile & { costs?: Record<string, SessionCost> };
         setSessions(data.sessions || {});
+        setCosts(data.costs || {});
       }
     } catch {
       // ignore
@@ -117,7 +119,7 @@ export default function ControlTower() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
-      <Header agentCount={activeSessionCount} pendingCount={pending.length} />
+      <Header agentCount={activeSessionCount} pendingCount={pending.length} totalCost={Object.values(costs).reduce((sum, c) => sum + (c.estimatedCostUSD ?? 0), 0)} />
 
       <main className="max-w-6xl mx-auto px-6 py-8 space-y-10">
         {/* Connection status */}
@@ -154,7 +156,7 @@ export default function ControlTower() {
           <h2 className="text-xs font-semibold uppercase tracking-widest text-zinc-500 mb-4">
             All Agents
           </h2>
-          <AgentGrid sessions={sessions} />
+          <AgentGrid sessions={sessions} costs={costs} />
         </section>
       </main>
     </div>
