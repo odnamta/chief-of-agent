@@ -117,25 +117,35 @@ export interface RuleSuggestion {
   approvalCount: number;
   denialCount: number;
   consistent: boolean;
+  generalized: boolean; // true if pattern was smart-generalized
+  rawDetail: string;    // original detail string before generalization
+}
+
+export interface AutomationMetrics {
+  totalDecisions: number;
+  automatedDecisions: number; // rule + AI tier
+  manualDecisions: number;    // dashboard tier
+  automationRate: number;     // 0-100
+  potentialRate: number;      // 0-100 if suggestions adopted
+  savingsPerDay: number;      // estimated manual decisions saved per day
 }
 
 /**
  * Analyzes the audit log for patterns and suggests rules.
- * Groups entries by (tool, detail) and finds consistent patterns.
- *
- * Only suggests rules for patterns that:
- * - Have been seen 3+ times
- * - Are 100% consistent (all same decision, no conflicts)
- * - Were handled by the dashboard tier (human decisions worth automating)
+ * Now with smart pattern generalization:
+ * - File paths → dir/.*\\.ext patterns
+ * - Bash commands → command.* patterns
+ * - npm/git subcommands → grouped by base command
  */
 export function suggestRules(entries: AuditEntry[]): RuleSuggestion[] {
-  // Group dashboard-tier decisions by (tool, detail)
-  const groups = new Map<string, { allow: number; deny: number; tool: string; detail: string }>();
+  // Group dashboard-tier decisions by (tool, GENERALIZED detail)
+  const groups = new Map<string, { allow: number; deny: number; tool: string; detail: string; generalized: string }>();
 
   for (const entry of entries) {
     if (entry.tier !== 'dashboard') continue;
-    const key = `${entry.tool}||${entry.detail}`;
-    const existing = groups.get(key) ?? { allow: 0, deny: 0, tool: entry.tool, detail: entry.detail };
+    const generalized = generalizePattern(entry.tool, entry.detail);
+    const key = `${entry.tool}||${generalized}`;
+    const existing = groups.get(key) ?? { allow: 0, deny: 0, tool: entry.tool, detail: entry.detail, generalized };
     if (entry.decision === 'allow') existing.allow++;
     else if (entry.decision === 'deny') existing.deny++;
     groups.set(key, existing);
@@ -143,25 +153,113 @@ export function suggestRules(entries: AuditEntry[]): RuleSuggestion[] {
 
   const suggestions: RuleSuggestion[] = [];
 
-  for (const { allow, deny, tool, detail } of groups.values()) {
+  for (const { allow, deny, tool, detail, generalized } of groups.values()) {
     const total = allow + deny;
-    if (total < 3) continue;
+    if (total < 2) continue; // Lowered from 3 to catch more patterns with generalization
 
     const consistent = allow === 0 || deny === 0;
     const action: 'allow' | 'deny' = allow > deny ? 'allow' : 'deny';
+    const isGeneralized = generalized !== escapeRegExp(detail);
 
     suggestions.push({
       tool,
-      pattern: escapeRegExp(detail),
+      pattern: generalized,
       action,
       approvalCount: allow,
       denialCount: deny,
       consistent,
+      generalized: isGeneralized,
+      rawDetail: detail,
     });
   }
 
-  // Sort by total count descending
   return suggestions.sort((a, b) => (b.approvalCount + b.denialCount) - (a.approvalCount + a.denialCount));
+}
+
+/**
+ * Compute automation metrics from audit log entries.
+ */
+export function computeMetrics(entries: AuditEntry[], suggestionsCount: number): AutomationMetrics {
+  const total = entries.length;
+  const automated = entries.filter(e => e.tier === 'rule' || e.tier === 'ai').length;
+  const manual = entries.filter(e => e.tier === 'dashboard').length;
+  const rate = total > 0 ? Math.round(automated / total * 100) : 0;
+
+  // Estimate potential: if all consistent suggestions adopted, manual drops by that count
+  const potentialManualSaved = Math.min(suggestionsCount * 3, manual); // conservative
+  const potentialAutomated = automated + potentialManualSaved;
+  const potentialRate = total > 0 ? Math.round(potentialAutomated / total * 100) : 0;
+
+  // Estimate daily savings: assume entries span ~8 hours of work
+  const hoursSpan = total > 1
+    ? (new Date(entries[entries.length - 1].timestamp).getTime() - new Date(entries[0].timestamp).getTime()) / 3_600_000
+    : 8;
+  const dailyFactor = hoursSpan > 0 ? 8 / hoursSpan : 1;
+  const savingsPerDay = Math.round(potentialManualSaved * dailyFactor);
+
+  return { totalDecisions: total, automatedDecisions: automated, manualDecisions: manual, automationRate: rate, potentialRate, savingsPerDay };
+}
+
+/**
+ * Smart pattern generalization for common command/path patterns.
+ */
+export function generalizePattern(tool: string, detail: string): string {
+  if (tool === 'Edit' || tool === 'Write' || tool === 'Read') {
+    return generalizeFilePath(detail);
+  }
+  if (tool === 'Bash') {
+    return generalizeBashCommand(detail);
+  }
+  return escapeRegExp(detail);
+}
+
+function generalizeFilePath(filepath: string): string {
+  // Extract directory and extension
+  const lastSlash = filepath.lastIndexOf('/');
+  const dir = lastSlash > 0 ? filepath.slice(0, lastSlash) : '';
+  const filename = lastSlash > 0 ? filepath.slice(lastSlash + 1) : filepath;
+  const dotIdx = filename.lastIndexOf('.');
+  const ext = dotIdx > 0 ? filename.slice(dotIdx) : '';
+
+  if (dir && ext) {
+    // src/components/Header.tsx → src/components/.*\\.tsx
+    return escapeRegExp(dir) + '/.*' + escapeRegExp(ext);
+  }
+  return escapeRegExp(filepath);
+}
+
+function generalizeBashCommand(command: string): string {
+  // Split into base command + args
+  const parts = command.trim().split(/\s+/);
+  const base = parts[0];
+
+  // npm/npx subcommands: npm run build → npm run.*
+  if ((base === 'npm' || base === 'npx') && parts.length >= 2) {
+    return escapeRegExp(parts.slice(0, 2).join(' ')) + '.*';
+  }
+
+  // git subcommands: git push origin main → git push.*
+  if (base === 'git' && parts.length >= 2) {
+    return escapeRegExp(parts.slice(0, 2).join(' ')) + '.*';
+  }
+
+  // swift subcommands: swift build -c release → swift build.*
+  if (base === 'swift' && parts.length >= 2) {
+    return escapeRegExp(parts.slice(0, 2).join(' ')) + '.*';
+  }
+
+  // cd commands: cd /some/path → cd .*
+  if (base === 'cd') {
+    return 'cd .*';
+  }
+
+  // Commands with file arguments: cat file.txt → cat .*
+  if (parts.length >= 2 && ['cat', 'head', 'tail', 'less', 'more', 'wc', 'chmod', 'mkdir'].includes(base)) {
+    return escapeRegExp(base) + ' .*';
+  }
+
+  // Default: escape the whole thing
+  return escapeRegExp(command);
 }
 
 /**

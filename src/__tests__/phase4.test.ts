@@ -356,9 +356,8 @@ describe('suggestRules', () => {
     };
   }
 
-  it('returns empty array for fewer than 3 dashboard entries per pattern', () => {
+  it('returns empty array for fewer than 2 dashboard entries per pattern', () => {
     const entries: AuditEntry[] = [
-      makeEntry('Bash', 'npm test', 'allow'),
       makeEntry('Bash', 'npm test', 'allow'),
     ];
     const suggestions = suggestRules(entries);

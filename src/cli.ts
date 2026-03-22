@@ -13,7 +13,7 @@ import { NotificationDispatcher } from './notify.js';
 import { installHooks, installDashboardHook, installHTTPHook, uninstallHooks, ensureConfigDir } from './setup.js';
 import { loadPolicies, matchRule } from './rules.js';
 import { classifyWithAI } from './ai-classifier.js';
-import { logAudit, readAudit, suggestRules } from './audit.js';
+import { logAudit, readAudit, suggestRules, computeMetrics } from './audit.js';
 import { exportPolicies, importPolicies, diffPolicies } from './policy-exchange.js';
 import {
   loadWebhooks as loadWebhooksConfig,
@@ -698,52 +698,80 @@ function printAuditStats(entries: AuditEntry[]): void {
 program
   .command('suggest')
   .description('Analyze audit log and suggest new rules')
-  .action(async () => {
+  .option('--apply', 'Auto-apply all consistent suggestions without prompting')
+  .action(async (opts: { apply?: boolean }) => {
     const allEntries = readAudit(10000);
 
-    if (allEntries.length < 10) {
-      console.log(`\n  Not enough data yet (${allEntries.length} entries, need 10+). Run more Claude Code sessions.\n`);
+    if (allEntries.length < 5) {
+      console.log(`\n  Not enough data yet (${allEntries.length} entries, need 5+). Run more Claude Code sessions.\n`);
       return;
     }
 
     const suggestions = suggestRules(allEntries);
+    const consistent = suggestions.filter(s => s.consistent);
+    const conflicts = suggestions.filter(s => !s.consistent);
+    const metrics = computeMetrics(allEntries, consistent.length);
 
-    if (suggestions.length === 0) {
-      console.log('\n  No clear patterns found yet. More sessions needed.\n');
-      return;
-    }
+    // Metrics header
+    console.log('\n  ╔══════════════════════════════════════╗');
+    console.log('  ║     Pattern Intelligence Report      ║');
+    console.log('  ╚══════════════════════════════════════╝\n');
 
-    console.log(`\n  Suggested Rules (based on ${allEntries.length} decisions)\n`);
-
-    const toApply: Array<{ tool: string; pattern: string; action: 'allow' | 'deny' }> = [];
-
-    for (const s of suggestions) {
-      const total = s.approvalCount + s.denialCount;
-      if (s.consistent) {
-        const icon = s.action === 'allow' ? '[+]' : '[!]';
-        console.log(`  ${icon} You ${s.action === 'allow' ? 'approved' : 'denied'} "${s.tool}: ${s.pattern}" ${total} times (0 conflicts)`);
-        console.log(`     Suggested: { "tool": "${s.tool}", "pattern": "${s.pattern}", "action": "${s.action}" }\n`);
-        toApply.push({ tool: s.tool, pattern: s.pattern, action: s.action });
-      } else {
-        console.log(`  [~] Mixed results for "${s.tool}: ${s.pattern}" (allow=${s.approvalCount}, deny=${s.denialCount})`);
-        console.log(`     No suggestion — inconsistent pattern, keep manual\n`);
+    console.log(`  Analyzed: ${metrics.totalDecisions} decisions`);
+    console.log(`  Current automation: ${metrics.automationRate}% (${metrics.automatedDecisions} rule/AI, ${metrics.manualDecisions} manual)`);
+    if (consistent.length > 0) {
+      console.log(`  Potential automation: ${metrics.potentialRate}% (if ${consistent.length} suggestions adopted)`);
+      if (metrics.savingsPerDay > 0) {
+        console.log(`  Estimated savings: ~${metrics.savingsPerDay} fewer manual decisions per day`);
       }
     }
 
-    if (toApply.length === 0) {
-      console.log('  No consistent patterns to add.\n');
-      return;
+    // Consistent suggestions
+    if (consistent.length > 0) {
+      console.log(`\n  ── Recommendations (${consistent.length}) ──\n`);
+      const toApply: Array<{ tool: string; pattern: string; action: 'allow' | 'deny' }> = [];
+
+      for (const s of consistent) {
+        const total = s.approvalCount + s.denialCount;
+        const icon = s.action === 'allow' ? '✓' : '✗';
+        const gen = s.generalized ? ' (generalized)' : '';
+        console.log(`  ${icon} ${s.tool}: ${s.pattern}${gen}`);
+        console.log(`    ${s.action === 'allow' ? 'Approved' : 'Denied'} ${total}× consistently → auto-${s.action}`);
+        toApply.push({ tool: s.tool, pattern: s.pattern, action: s.action });
+      }
+
+      if (opts.apply) {
+        const policies = loadPolicies();
+        policies.rules.push(...toApply);
+        writePolicies(policies);
+        console.log(`\n  ✓ Applied ${toApply.length} rule(s) to policies.json\n`);
+      } else if (toApply.length > 0) {
+        console.log('');
+        const answer = await promptUser(`  Apply ${toApply.length} suggestion(s)? (y/n) `);
+        if (answer.trim().toLowerCase() === 'y') {
+          const policies = loadPolicies();
+          policies.rules.push(...toApply);
+          writePolicies(policies);
+          console.log(`\n  ✓ Applied ${toApply.length} rule(s) to policies.json\n`);
+        } else {
+          console.log('\n  No changes made.\n');
+        }
+      }
     }
 
-    const answer = await promptUser(`  Apply ${toApply.length} suggestion(s) to policies.json? (y/n) `);
-    if (answer.trim().toLowerCase() === 'y') {
-      const policies = loadPolicies();
-      policies.rules.push(...toApply);
-      writePolicies(policies);
-      console.log(`\n  Added ${toApply.length} rule(s) to policies.json.\n`);
-    } else {
-      console.log('\n  No changes made.\n');
+    // Conflicts
+    if (conflicts.length > 0) {
+      console.log(`\n  ── Conflicts (${conflicts.length}) — review manually ──\n`);
+      for (const s of conflicts) {
+        console.log(`  ⚠ ${s.tool}: ${s.pattern}`);
+        console.log(`    Mixed: ${s.approvalCount} allow, ${s.denialCount} deny — keep manual review`);
+      }
     }
+
+    if (suggestions.length === 0) {
+      console.log('\n  No clear patterns found yet. More sessions needed.\n');
+    }
+    console.log('');
   });
 
 // ─────────────────────────────────────────────
