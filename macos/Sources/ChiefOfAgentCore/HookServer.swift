@@ -80,10 +80,10 @@ public class HookServer: ObservableObject {
 
                     // Phase 1: Call onHookEvent on MainActor to create pending request
                     let semaphore = DispatchSemaphore(value: 0)
-                    var result: [String: Any]?
+                    let resultBox = SendableBox()
 
                     Task { @MainActor in
-                        result = self.onHookEvent?(event)
+                        resultBox.value = self.onHookEvent?(event)
                         semaphore.signal()
                     }
 
@@ -92,6 +92,8 @@ public class HookServer: ObservableObject {
                         print("[HookServer] onHookEvent timed out")
                         return nil
                     }
+
+                    let result = resultBox.value
 
                     // Phase 2: If handler returned a pending request ID, wait for user decision
                     if let requestId = result?["__waitForDecision"] as? String,
@@ -186,5 +188,11 @@ public class HookServer: ObservableObject {
         connection.send(content: response.data(using: .utf8), completion: .contentProcessed { _ in
             connection.cancel()
         })
+    }
+
+    /// Thread-safe box for passing values out of @Sendable Task closures.
+    /// See StateWatcher.Box for the safety contract.
+    private final class SendableBox: @unchecked Sendable {
+        var value: [String: Any]?
     }
 }
