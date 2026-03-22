@@ -89,17 +89,78 @@ program
 
 program
   .command('status')
-  .description('Show all registered agent sessions')
+  .description('Show all registered agent sessions and system state')
   .action(async () => {
+    const configDir = path.join(os.homedir(), '.chief-of-agent');
     const sessions = await stateManager.getAll();
     const entries = Object.entries(sessions);
 
+    console.log('\n  ╔══════════════════════════════════════╗');
+    console.log('  ║        Chief of Agent — Status       ║');
+    console.log('  ╚══════════════════════════════════════╝\n');
+
+    // System health
+    const policiesFile = path.join(configDir, 'policies.json');
+    let ruleCount = 0;
+    if (fs.existsSync(policiesFile)) {
+      try {
+        const pol = JSON.parse(fs.readFileSync(policiesFile, 'utf-8'));
+        ruleCount = pol.rules?.length ?? 0;
+      } catch { /* ignore */ }
+    }
+
+    const pendingFile = path.join(configDir, 'pending.json');
+    let pendingCount = 0;
+    if (fs.existsSync(pendingFile)) {
+      try {
+        const pf = JSON.parse(fs.readFileSync(pendingFile, 'utf-8'));
+        pendingCount = Object.keys(pf.requests ?? {}).length;
+      } catch { /* ignore */ }
+    }
+
+    // Cost data
+    const costsFile = path.join(configDir, 'costs.json');
+    let totalCost = 0;
+    const sessionCosts: Record<string, number> = {};
+    if (fs.existsSync(costsFile)) {
+      try {
+        const costs = JSON.parse(fs.readFileSync(costsFile, 'utf-8')) as Record<string, { estimatedCostUSD?: number }>;
+        for (const [id, c] of Object.entries(costs)) {
+          const cost = c.estimatedCostUSD ?? 0;
+          sessionCosts[id] = cost;
+          totalCost += cost;
+        }
+      } catch { /* ignore */ }
+    }
+
+    // Check services
+    let hookServerUp = false;
+    try {
+      const res = await fetch('http://127.0.0.1:19222/health', { signal: AbortSignal.timeout(1000) });
+      hookServerUp = res.ok;
+    } catch { /* not running */ }
+
+    let dashboardUp = false;
+    try {
+      const res = await fetch('http://localhost:3400', { signal: AbortSignal.timeout(1000) });
+      dashboardUp = res.ok;
+    } catch { /* not running */ }
+
+    console.log('  ── System ──\n');
+    console.log(`  Rules:      ${ruleCount > 0 ? `${ruleCount} loaded` : 'none (run setup --auto)'}`);
+    console.log(`  Pending:    ${pendingCount > 0 ? `${pendingCount} awaiting approval` : 'none'}`);
+    console.log(`  Cost:       ${totalCost > 0 ? `$${totalCost.toFixed(2)} total` : 'no data yet'}`);
+    console.log(`  HookServer: ${hookServerUp ? '● running (127.0.0.1:19222)' : '○ not running'}`);
+    console.log(`  Dashboard:  ${dashboardUp ? '● running (localhost:3400)' : '○ not running'}`);
+
+    // Sessions
     if (entries.length === 0) {
-      console.log('No active sessions.');
+      console.log('\n  ── Sessions ──\n');
+      console.log('  No active sessions. Start Claude Code to see them here.\n');
       return;
     }
 
-    console.log(`\n  Chief of Agent — ${entries.length} active session(s)\n`);
+    console.log(`\n  ── Sessions (${entries.length}) ──\n`);
 
     const statusIcon: Record<string, string> = {
       working: '\u{1F7E2}',
@@ -113,7 +174,9 @@ program
       const icon = statusIcon[session.status] || '?';
       const shortId = id.slice(0, 8);
       const age = timeSince(new Date(session.last_event_at));
-      console.log(`  ${icon} ${session.project.padEnd(20)} ${session.status.padEnd(10)} ${age.padEnd(10)} [${shortId}]`);
+      const cost = sessionCosts[id];
+      const costStr = cost != null && cost > 0 ? ` $${cost.toFixed(2)}` : '';
+      console.log(`  ${icon} ${session.project.padEnd(18)} ${session.status.padEnd(10)} ${age.padEnd(10)} [${shortId}]${costStr}`);
       if (session.waiting_context) {
         console.log(`     \u2514\u2500 ${session.waiting_context}`);
       }
