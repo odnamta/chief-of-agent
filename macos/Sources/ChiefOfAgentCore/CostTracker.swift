@@ -43,6 +43,12 @@ public class CostTracker: ObservableObject {
     private var lastScanTime: Date?
     private let scanInterval: TimeInterval = 60 // 1 minute
 
+    /// Track byte offsets per session to only read new data (incremental parsing)
+    private var readOffsets: [String: UInt64] = [:]
+
+    /// Running totals per session (accumulated across incremental reads)
+    private var runningTotals: [String: (input: Int, output: Int, cacheRead: Int, cacheWrite: Int, calls: Int)] = [:]
+
     public init() {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         self.cachePath = "\(home)/.chief-of-agent/costs.json"
@@ -61,7 +67,7 @@ public class CostTracker: ObservableObject {
             guard session.status == .working || session.status == .waiting else { continue }
 
             if let jsonlPath = findJSONLPath(sessionId: sessionId, cwd: session.cwd) {
-                let cost = parseTokenUsage(from: jsonlPath)
+                let cost = parseTokenUsage(sessionId: sessionId, from: jsonlPath)
                 costs[sessionId] = cost
             }
         }
@@ -69,52 +75,91 @@ public class CostTracker: ObservableObject {
         saveCache()
     }
 
-    // MARK: - JSONL Parsing
+    // MARK: - Incremental JSONL Parsing
 
-    private func parseTokenUsage(from path: String) -> SessionCost {
-        guard let data = FileManager.default.contents(atPath: path),
-              let text = String(data: data, encoding: .utf8) else {
-            return SessionCost(inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, apiCalls: 0, estimatedCostUSD: 0)
+    /// Incrementally parses new bytes from a JSONL file, accumulating running totals.
+    /// Only reads data after the last known offset — safe for 100MB+ files.
+    private func parseTokenUsage(sessionId: String, from path: String) -> SessionCost {
+        let fm = FileManager.default
+
+        // Get current file size
+        guard let attrs = try? fm.attributesOfItem(atPath: path),
+              let fileSize = attrs[.size] as? UInt64 else {
+            return makeCost(sessionId: sessionId)
         }
 
-        var totalInput = 0
-        var totalOutput = 0
-        var totalCacheRead = 0
-        var totalCacheWrite = 0
-        var apiCalls = 0
+        let lastOffset = readOffsets[sessionId] ?? 0
 
-        let lines = text.components(separatedBy: "\n")
-        for line in lines {
-            guard !line.isEmpty,
-                  let lineData = line.data(using: .utf8),
-                  let obj = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any] else {
-                continue
-            }
-
-            guard obj["type"] as? String == "assistant",
-                  let message = obj["message"] as? [String: Any],
-                  let usage = message["usage"] as? [String: Any] else {
-                continue
-            }
-
-            totalInput += usage["input_tokens"] as? Int ?? 0
-            totalOutput += usage["output_tokens"] as? Int ?? 0
-            totalCacheRead += usage["cache_read_input_tokens"] as? Int ?? 0
-            totalCacheWrite += usage["cache_creation_input_tokens"] as? Int ?? 0
-            apiCalls += 1
+        // Skip if no new data
+        if fileSize <= lastOffset {
+            return makeCost(sessionId: sessionId)
         }
 
-        let cost = Double(totalInput) * Self.inputPricePer1M / 1_000_000
-            + Double(totalOutput) * Self.outputPricePer1M / 1_000_000
-            + Double(totalCacheRead) * Self.cacheReadPricePer1M / 1_000_000
-            + Double(totalCacheWrite) * Self.cacheWritePricePer1M / 1_000_000
+        // Read only new bytes from lastOffset to end
+        guard let fileHandle = FileHandle(forReadingAtPath: path) else {
+            return makeCost(sessionId: sessionId)
+        }
+        defer { fileHandle.closeFile() }
+
+        fileHandle.seek(toFileOffset: lastOffset)
+
+        // Read in chunks (64KB) to avoid memory spikes
+        let chunkSize = 65_536
+        var buffer = ""
+        var current = runningTotals[sessionId] ?? (input: 0, output: 0, cacheRead: 0, cacheWrite: 0, calls: 0)
+
+        while true {
+            let chunk = fileHandle.readData(ofLength: chunkSize)
+            if chunk.isEmpty { break }
+
+            guard let text = String(data: chunk, encoding: .utf8) else { break }
+            buffer += text
+
+            // Process complete lines
+            while let newlineRange = buffer.range(of: "\n") {
+                let line = String(buffer[buffer.startIndex..<newlineRange.lowerBound])
+                buffer = String(buffer[newlineRange.upperBound...])
+
+                guard !line.isEmpty,
+                      let lineData = line.data(using: .utf8),
+                      let obj = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any] else {
+                    continue
+                }
+
+                guard obj["type"] as? String == "assistant",
+                      let message = obj["message"] as? [String: Any],
+                      let usage = message["usage"] as? [String: Any] else {
+                    continue
+                }
+
+                current.input += usage["input_tokens"] as? Int ?? 0
+                current.output += usage["output_tokens"] as? Int ?? 0
+                current.cacheRead += usage["cache_read_input_tokens"] as? Int ?? 0
+                current.cacheWrite += usage["cache_creation_input_tokens"] as? Int ?? 0
+                current.calls += 1
+            }
+        }
+
+        // Update tracking state
+        readOffsets[sessionId] = fileSize
+        runningTotals[sessionId] = current
+
+        return makeCost(sessionId: sessionId)
+    }
+
+    private func makeCost(sessionId: String) -> SessionCost {
+        let t = runningTotals[sessionId] ?? (input: 0, output: 0, cacheRead: 0, cacheWrite: 0, calls: 0)
+        let cost = Double(t.input) * Self.inputPricePer1M / 1_000_000
+            + Double(t.output) * Self.outputPricePer1M / 1_000_000
+            + Double(t.cacheRead) * Self.cacheReadPricePer1M / 1_000_000
+            + Double(t.cacheWrite) * Self.cacheWritePricePer1M / 1_000_000
 
         return SessionCost(
-            inputTokens: totalInput,
-            outputTokens: totalOutput,
-            cacheReadTokens: totalCacheRead,
-            cacheWriteTokens: totalCacheWrite,
-            apiCalls: apiCalls,
+            inputTokens: t.input,
+            outputTokens: t.output,
+            cacheReadTokens: t.cacheRead,
+            cacheWriteTokens: t.cacheWrite,
+            apiCalls: t.calls,
             estimatedCostUSD: cost
         )
     }
