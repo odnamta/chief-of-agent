@@ -133,7 +133,8 @@ npm run dev    # localhost:3400
 | Command | What |
 |---------|------|
 | `chief-of-agent setup [--dashboard\|--http] [--auto]` | Install hooks |
-| `chief-of-agent status` | Show all active sessions |
+| `chief-of-agent status` | Show sessions, costs, system health |
+| `chief-of-agent discover` | Scan your Claude Code setup, find unused capabilities |
 | `chief-of-agent scan` | Discover running Claude Code processes |
 | `chief-of-agent rename <id> <name>` | Rename a session's project |
 | `chief-of-agent config show` | View configuration |
@@ -227,6 +228,23 @@ chief-of-agent suggest --apply  # auto-apply all consistent suggestions
 ```
 
 Shows automation metrics: current rate, potential rate if suggestions adopted, estimated daily savings. The dashboard includes a Pattern Intelligence card with the same data.
+
+---
+
+## Discover — Know What Claude Code Can Do For You
+
+Claude Code has 21 hook events, 340+ plugins, MCP servers, skills, worktrees, voice mode, Agent Teams, and more. But there's no single place to see what YOU have installed and what you're missing.
+
+```bash
+chief-of-agent discover
+```
+
+Shows:
+- **What you have** — plugins, skills, commands, hooks, MCP servers, permissions
+- **Warnings** — skill budget overflow (Claude silently hides skills beyond ~50)
+- **Tips** — contextual suggestions based on your setup (Agent Teams, worktrees, voice mode)
+
+Also surfaces warnings in `setup` and `status` commands so you see issues proactively.
 
 ---
 

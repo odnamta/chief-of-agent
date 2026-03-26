@@ -5,7 +5,7 @@ import Foundation
 @MainActor
 public class UpdateChecker: ObservableObject {
 
-    public static let currentVersion = "1.0.0"
+    public static let currentVersion = "1.3.0"
 
     @Published public var latestVersion: String?
     @Published public var updateAvailable = false

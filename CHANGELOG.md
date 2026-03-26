@@ -7,6 +7,39 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.3.0] - 2026-03-22
+
+### Added — Discovery & Observability
+
+- **`chief-of-agent discover`** — scans your Claude Code setup and shows everything:
+  plugins, skills, commands, hooks, MCP servers, permissions, Auto Mode status.
+  Warns about skill budget overflow (218 skills installed → 168 silently hidden).
+  Contextual tips based on your setup.
+- **PostCompact hook** — re-injects session context (project, cost, decisions)
+  after Claude Code compacts context in long sessions
+- **`compact-context` command** — outputs session summary for PostCompact hook
+- **Discover warnings surface proactively** in `setup` and `status` commands
+- **Positioning pivot** — CoA complements Claude Code (governance + observability +
+  discovery), works alongside Auto Mode as a layered governance system
+
+### Added — Team Features (v1.1.0–v1.2.0)
+
+- **Webhook notifications** — Slack Block Kit, Discord embeds, custom endpoints,
+  HMAC-SHA256 signing, event filtering (deny, error, cost_alert)
+- **Policy export/import/diff** — team policy sharing with locked rules,
+  merge/replace modes, dry-run preview
+- **Pattern Intelligence** — smart pattern generalization in suggest engine,
+  automation metrics, dashboard insights card
+- **Enhanced `status` command** — system health, costs, services, plugins
+
+### Changed
+
+- README repositioned: "Governance & observability layer for Claude Code"
+- "Works With Auto Mode" section documenting layered architecture
+- All versions bumped to 1.3.0
+
+---
+
 ## [1.0.0] - 2026-03-22
 
 ### Production Release

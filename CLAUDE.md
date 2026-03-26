@@ -25,6 +25,8 @@ Agent governance platform for Claude Code CLI. Monitors sessions, enforces rules
 - `chief-of-agent uninstall [--purge]` — remove hooks (and optionally config dir)
 - `chief-of-agent webhook add/list/remove/test` — manage webhook notifications
 - `chief-of-agent policy export/import/diff` — team policy sharing
+- `chief-of-agent discover` — scan Claude Code setup, find unused capabilities
+- `chief-of-agent compact-context` — re-inject context after PostCompact (hook)
 
 ## Architecture — CLI (src/)
 - `src/cli.ts` — CLI entry point (commander.js, 10+ commands)
@@ -39,6 +41,7 @@ Agent governance platform for Claude Code CLI. Monitors sessions, enforces rules
 - `src/audit.ts` — Append-only JSONL audit log with rotation + rule suggestion
 - `src/webhooks.ts` — Webhook notifications (Slack/Discord/custom, HMAC signing)
 - `src/policy-exchange.ts` — Policy export/import/diff for team sharing
+- `src/discover.ts` — Scan Claude Code setup, surface unused capabilities
 - `src/ai-classifier.ts` — Claude Haiku AI classifier (Tier 2, opt-in)
 
 ## Architecture — macOS Menu Bar App (macos/)
