@@ -225,6 +225,15 @@ program
     console.log(`  HookServer: ${hookServerUp ? '● running (127.0.0.1:19222)' : '○ not running'}`);
     console.log(`  Dashboard:  ${dashboardUp ? '● running (localhost:3400)' : '○ not running'}`);
 
+    // Quick discover summary
+    const setupReport = discover();
+    console.log(`  Plugins:    ${setupReport.plugins.length} installed`);
+    if (setupReport.warnings.length > 0) {
+      for (const w of setupReport.warnings) {
+        console.log(`  ${w.icon}  ${w.message}`);
+      }
+    }
+
     // Sessions
     if (entries.length === 0) {
       console.log('\n  ── Sessions ──\n');
@@ -416,8 +425,26 @@ program
 
     console.log('  ── Useful Commands ──\n');
     console.log('  chief-of-agent status    — see all active sessions');
+    console.log('  chief-of-agent discover  — scan your Claude Code capabilities');
     console.log('  chief-of-agent audit     — view decision log');
     console.log('  chief-of-agent suggest   — get rule recommendations');
+
+    // Show discover warnings proactively
+    const report = discover();
+    if (report.warnings.length > 0) {
+      console.log('\n  ── Health Warnings ──\n');
+      for (const w of report.warnings) {
+        console.log(`  ${w.icon}  ${w.message}`);
+      }
+    }
+    // Show top 2 tips
+    if (report.tips.length > 0) {
+      console.log('\n  ── Quick Tips ──\n');
+      for (const t of report.tips.slice(0, 2)) {
+        console.log(`  ${t.icon}  ${t.message}`);
+        if (t.command) console.log(`     → ${t.command}`);
+      }
+    }
     console.log('');
   });
 
