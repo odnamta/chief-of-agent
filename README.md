@@ -1,6 +1,6 @@
 # Chief of Agent
 
-**Agent governance for Claude Code — know what your AI agents are doing, control what they can do.**
+**Governance & observability layer for Claude Code — see everything, audit everything, control what matters.**
 
 [![CI](https://github.com/odnamta/chief-of-agent/actions/workflows/test.yml/badge.svg)](https://github.com/odnamta/chief-of-agent/actions/workflows/test.yml)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -10,13 +10,17 @@
 
 ## What It Does
 
-You run multiple Claude Code sessions in parallel. Chief of Agent:
+Claude Code is powerful. Chief of Agent makes it **observable and accountable.**
 
-1. **Monitors** all sessions — which are working, waiting, or errored
-2. **Enforces rules** — 34 default policies block destructive commands automatically
-3. **Approves/denies** — pending actions appear in your menu bar or web dashboard
-4. **Audits** — every decision is logged for review and pattern analysis
-5. **Summarizes** — AI-generated summaries show what each agent is doing
+Works alongside Claude Code's built-in permissions and Auto Mode — adding the governance, observability, and team features that the CLI doesn't provide:
+
+1. **Observes** — real-time menu bar + web dashboard showing all sessions, costs, and AI summaries
+2. **Audits** — every permission decision logged with rule, tier, and latency
+3. **Governs** — 34 default rules + team policy sharing + webhook alerts
+4. **Learns** — analyzes your decisions and suggests automation to reduce interruptions
+5. **Tracks costs** — per-session spending visible at a glance, with alert thresholds
+
+> *Auto Mode makes Claude fast. Chief of Agent makes Claude accountable.*
 
 Three interfaces: **macOS menu bar** + **web dashboard** + **CLI**.
 
@@ -223,6 +227,26 @@ chief-of-agent suggest --apply  # auto-apply all consistent suggestions
 ```
 
 Shows automation metrics: current rate, potential rate if suggestions adopted, estimated daily savings. The dashboard includes a Pattern Intelligence card with the same data.
+
+---
+
+## Works With Auto Mode
+
+Chief of Agent complements Claude Code's built-in Auto Mode (March 2026). They can run together:
+
+```
+Claude Code session
+  └── Auto Mode (built-in classifier — handles obvious allow/deny)
+       └── CoA PreToolUse hook (your organizational policies — second pass)
+            └── Audit log (every decision recorded — Auto Mode has none)
+                 └── Webhook → Slack notification
+```
+
+Auto Mode handles the first pass. CoA adds:
+- **Audit trail** that Auto Mode doesn't provide
+- **Organizational policies** that go beyond what the built-in classifier catches
+- **Real-time visibility** in menu bar and dashboard
+- **Team sharing** of policies across developers
 
 ---
 
