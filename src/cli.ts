@@ -16,6 +16,7 @@ import { classifyWithAI } from './ai-classifier.js';
 import { logAudit, readAudit, suggestRules, computeMetrics } from './audit.js';
 import { exportPolicies, importPolicies, diffPolicies } from './policy-exchange.js';
 import { discover, formatReport } from './discover.js';
+import { analyzeSkills, generateHTMLReport } from './skill-analyzer.js';
 import {
   loadWebhooks as loadWebhooksConfig,
   saveWebhooks as saveWebhooksConfig,
@@ -314,6 +315,57 @@ program
     child.unref();
     console.log('  ✓ Dashboard starting at http://localhost:3400');
     console.log('  Stop with: chief-of-agent dashboard --stop\n');
+  });
+
+const skillsCmd = program
+  .command('skills')
+  .description('Analyze and optimize Claude Code skills');
+
+skillsCmd
+  .command('report')
+  .description('Generate visual HTML report of all skills')
+  .action(() => {
+    const report = analyzeSkills();
+    const html = generateHTMLReport(report);
+    const outPath = path.join(os.tmpdir(), `coa-skills-report-${Date.now()}.html`);
+    fs.writeFileSync(outPath, html);
+
+    console.log(`\n  ✓ Skill Report Generated\n`);
+    console.log(`  Total skills: ${report.total} (across ${report.byPlugin.length} plugins)`);
+    console.log(`  Budget: ${report.budgetPercent}% used (${report.overBudget > 0 ? `⚠️  ${report.overBudget.toLocaleString()} chars hidden` : '✓ all visible'})`);
+    console.log(`  Categories: ${report.byCategory.length}`);
+    console.log(`\n  Report: ${outPath}`);
+    console.log('  Opening in browser...\n');
+
+    import('node:child_process').then(({ execFileSync }) => {
+      try { execFileSync('open', [outPath]); } catch { /* not on macOS */ }
+    });
+  });
+
+skillsCmd
+  .command('list')
+  .description('List all skills grouped by category')
+  .action(() => {
+    const report = analyzeSkills();
+
+    console.log(`\n  ── Skills (${report.total}) — Budget: ${report.budgetPercent}% ──\n`);
+
+    for (const cat of report.byCategory) {
+      console.log(`  ${cat.category} (${cat.count}):`);
+      for (const skill of cat.skills.slice(0, 8)) {
+        console.log(`    ${skill}`);
+      }
+      if (cat.count > 8) console.log(`    ... +${cat.count - 8} more`);
+      console.log('');
+    }
+
+    if (report.recommendations.length > 0) {
+      console.log('  ── Recommendations ──\n');
+      for (const r of report.recommendations) {
+        console.log(`  ${r}`);
+      }
+      console.log('');
+    }
   });
 
 program
