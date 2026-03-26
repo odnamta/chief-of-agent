@@ -32,6 +32,7 @@ export function generateHooksConfig(): HooksConfig {
     Stop: [{ matcher: '', hooks: [{ type: 'command', command: 'chief-of-agent notify' }] }],
     SessionStart: [{ matcher: '', hooks: [{ type: 'command', command: 'chief-of-agent register', async: true }] }],
     SessionEnd: [{ matcher: '', hooks: [{ type: 'command', command: 'chief-of-agent unregister', async: true }] }],
+    PostCompact: [{ matcher: '', hooks: [{ type: 'command', command: 'chief-of-agent compact-context' }] }],
   };
 }
 

@@ -96,6 +96,69 @@ program
   });
 
 program
+  .command('compact-context')
+  .description('Re-inject session context after PostCompact (called by hook)')
+  .action(async () => {
+    try {
+      const input = await readStdin();
+      const event = parseHookInput(input);
+      const sessions = await stateManager.getAll();
+      const session = sessions[event.sessionId];
+
+      // Build context summary to re-inject
+      const lines: string[] = [];
+      lines.push(`[Chief of Agent — Context Restored]`);
+
+      if (session) {
+        lines.push(`Project: ${session.project}`);
+        lines.push(`CWD: ${session.cwd}`);
+        lines.push(`Status: ${session.status}`);
+        if (session.waiting_context) {
+          lines.push(`Last context: ${session.waiting_context}`);
+        }
+      }
+
+      // Include active rules count
+      const configDir = path.join(os.homedir(), '.chief-of-agent');
+      const policiesFile = path.join(configDir, 'policies.json');
+      if (fs.existsSync(policiesFile)) {
+        try {
+          const pol = JSON.parse(fs.readFileSync(policiesFile, 'utf-8'));
+          const ruleCount = pol.rules?.length ?? 0;
+          lines.push(`Active rules: ${ruleCount}`);
+        } catch { /* ignore */ }
+      }
+
+      // Include cost if tracked
+      const costsFile = path.join(configDir, 'costs.json');
+      if (fs.existsSync(costsFile)) {
+        try {
+          const costs = JSON.parse(fs.readFileSync(costsFile, 'utf-8')) as Record<string, { estimatedCostUSD?: number }>;
+          const sessionCost = costs[event.sessionId]?.estimatedCostUSD;
+          if (sessionCost != null && sessionCost > 0) {
+            lines.push(`Session cost so far: $${sessionCost.toFixed(2)}`);
+          }
+        } catch { /* ignore */ }
+      }
+
+      // Include recent decisions for this session
+      const allEntries = readAudit(50);
+      const sessionDecisions = allEntries.filter(e => e.sessionId === event.sessionId);
+      if (sessionDecisions.length > 0) {
+        const denials = sessionDecisions.filter(e => e.decision === 'deny').length;
+        const allows = sessionDecisions.filter(e => e.decision === 'allow').length;
+        lines.push(`Session decisions: ${allows} allowed, ${denials} denied`);
+      }
+
+      // Output as stdout — PostCompact hook injects this as system message
+      process.stdout.write(lines.join('\n'));
+    } catch {
+      // If parsing fails, output a minimal context restore
+      process.stdout.write('[Chief of Agent — Context compacted. Use `chief-of-agent status` to see current state.]');
+    }
+  });
+
+program
   .command('status')
   .description('Show all registered agent sessions and system state')
   .action(async () => {
