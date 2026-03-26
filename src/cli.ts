@@ -15,6 +15,7 @@ import { loadPolicies, matchRule } from './rules.js';
 import { classifyWithAI } from './ai-classifier.js';
 import { logAudit, readAudit, suggestRules, computeMetrics } from './audit.js';
 import { exportPolicies, importPolicies, diffPolicies } from './policy-exchange.js';
+import { discover, formatReport } from './discover.js';
 import {
   loadWebhooks as loadWebhooksConfig,
   saveWebhooks as saveWebhooksConfig,
@@ -253,6 +254,14 @@ program
       }
     }
     console.log('');
+  });
+
+program
+  .command('discover')
+  .description('Scan your Claude Code setup and find unused capabilities')
+  .action(() => {
+    const report = discover();
+    console.log(formatReport(report));
   });
 
 program
