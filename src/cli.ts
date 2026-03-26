@@ -16,7 +16,7 @@ import { classifyWithAI } from './ai-classifier.js';
 import { logAudit, readAudit, suggestRules, computeMetrics } from './audit.js';
 import { exportPolicies, importPolicies, diffPolicies } from './policy-exchange.js';
 import { discover, formatReport } from './discover.js';
-import { analyzeSkills, generateHTMLReport } from './skill-analyzer.js';
+import { analyzeSkills, generateHTMLReport, findStaleCache } from './skill-analyzer.js';
 import {
   loadWebhooks as loadWebhooksConfig,
   saveWebhooks as saveWebhooksConfig,
@@ -366,6 +366,51 @@ skillsCmd
       }
       console.log('');
     }
+  });
+
+skillsCmd
+  .command('clean')
+  .description('Remove stale plugin cache versions to free skill budget')
+  .option('--apply', 'Actually delete stale versions (default: dry run)')
+  .action((opts: { apply?: boolean }) => {
+    const result = findStaleCache(!opts.apply);
+
+    if (result.removed.length === 0 && result.protected.length === 0) {
+      console.log('\n  ✓ No stale cache versions found. Everything is clean.\n');
+      return;
+    }
+
+    if (!opts.apply) {
+      console.log('\n  ── Dry Run (use --apply to delete) ──\n');
+    } else {
+      console.log('\n  ── Cache Cleanup ──\n');
+    }
+
+    if (result.removed.length > 0) {
+      console.log(`  ${opts.apply ? 'Removed' : 'Would remove'} (${result.removed.length}):`);
+      for (const r of result.removed) {
+        console.log(`    ✗ ${r.plugin}/${r.version}`);
+      }
+    }
+
+    if (result.protected.length > 0) {
+      console.log(`\n  Protected (${result.protected.length}):`);
+      for (const p of result.protected) {
+        console.log(`    ✓ ${p.plugin}/${p.version} — ${p.reason}`);
+      }
+    }
+
+    if (result.kept.length > 0) {
+      console.log(`\n  Kept (${result.kept.length} latest versions):`);
+      for (const k of result.kept) {
+        console.log(`    ✓ ${k.plugin}/${k.version}`);
+      }
+    }
+
+    if (!opts.apply && result.removed.length > 0) {
+      console.log(`\n  Run with --apply to delete ${result.removed.length} stale versions.`);
+    }
+    console.log('');
   });
 
 program

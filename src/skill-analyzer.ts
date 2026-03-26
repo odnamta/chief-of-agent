@@ -341,3 +341,95 @@ function safeReaddir(dir: string): string[] {
 function isDir(p: string): boolean {
   try { return fs.statSync(p).isDirectory(); } catch { return false; }
 }
+
+// ── Cache Cleaner ────────────────────────────────────────────────────────────
+
+export interface CleanResult {
+  removed: Array<{ plugin: string; version: string; path: string }>;
+  kept: Array<{ plugin: string; version: string }>;
+  protected: Array<{ plugin: string; version: string; reason: string }>;
+}
+
+/**
+ * Safely clean stale plugin cache versions.
+ * Keeps the newest version + any versions referenced by installed_plugins.json.
+ * Returns what was removed/kept without actually deleting (dry run by default).
+ */
+export function findStaleCache(dryRun = true): CleanResult {
+  const cacheDir = path.join(CLAUDE_DIR, 'plugins', 'cache');
+  const result: CleanResult = { removed: [], kept: [], protected: [] };
+
+  if (!isDir(cacheDir)) return result;
+
+  // Load referenced paths from installed_plugins.json
+  const referencedPaths = new Set<string>();
+  const installedFile = path.join(CLAUDE_DIR, 'plugins', 'installed_plugins.json');
+  if (fs.existsSync(installedFile)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(installedFile, 'utf-8'));
+      const plugins = data.plugins ?? {};
+      for (const entries of Object.values(plugins)) {
+        for (const entry of entries as Array<{ installPath?: string }>) {
+          if (entry.installPath) {
+            referencedPaths.add(entry.installPath);
+          }
+        }
+      }
+    } catch { /* ignore */ }
+  }
+
+  // Scan each marketplace
+  for (const marketplace of safeReaddir(cacheDir)) {
+    const mpDir = path.join(cacheDir, marketplace);
+    if (!isDir(mpDir)) continue;
+
+    for (const plugin of safeReaddir(mpDir)) {
+      const pluginDir = path.join(mpDir, plugin);
+      if (!isDir(pluginDir)) continue;
+
+      const versions = safeReaddir(pluginDir)
+        .filter(v => isDir(path.join(pluginDir, v)))
+        .sort((a, b) => {
+          // Sort by modification time, newest first
+          const aTime = fs.statSync(path.join(pluginDir, a)).mtimeMs;
+          const bTime = fs.statSync(path.join(pluginDir, b)).mtimeMs;
+          return bTime - aTime;
+        });
+
+      if (versions.length <= 1) {
+        if (versions.length === 1) {
+          result.kept.push({ plugin, version: versions[0] });
+        }
+        continue;
+      }
+
+      // Keep newest
+      result.kept.push({ plugin, version: versions[0] });
+
+      // Check older versions
+      for (const version of versions.slice(1)) {
+        const versionPath = path.join(pluginDir, version);
+
+        // Check if referenced by installed_plugins.json
+        const isReferenced = [...referencedPaths].some(p => p.includes(version));
+        if (isReferenced) {
+          result.protected.push({ plugin, version, reason: 'referenced in installed_plugins.json' });
+          continue;
+        }
+
+        if (dryRun) {
+          result.removed.push({ plugin, version, path: versionPath });
+        } else {
+          try {
+            fs.rmSync(versionPath, { recursive: true, force: true });
+            result.removed.push({ plugin, version, path: versionPath });
+          } catch (err) {
+            result.protected.push({ plugin, version, reason: `delete failed: ${err}` });
+          }
+        }
+      }
+    }
+  }
+
+  return result;
+}
