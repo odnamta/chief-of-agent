@@ -36,20 +36,22 @@ public class HookServer: ObservableObject {
     public func start() {
         guard listener == nil else { return }
 
-        let parameters = NWParameters.tcp
-
         guard let nwPort = NWEndpoint.Port(rawValue: port) else {
             print("[HookServer] Invalid port: \(port)")
             return
         }
 
+        // Use TCP parameters with localhost binding
+        let parameters = NWParameters.tcp
         parameters.requiredLocalEndpoint = NWEndpoint.hostPort(
             host: NWEndpoint.Host("127.0.0.1"),
             port: nwPort
         )
+        // Allow port reuse to avoid EADDRINUSE after restart
+        parameters.allowLocalEndpointReuse = true
 
         do {
-            let l = try NWListener(using: parameters, on: nwPort)
+            let l = try NWListener(using: parameters)
 
             l.stateUpdateHandler = { [weak self] state in
                 guard let self = self else { return }

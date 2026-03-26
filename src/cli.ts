@@ -266,6 +266,57 @@ program
   });
 
 program
+  .command('dashboard')
+  .description('Start the web dashboard on localhost:3400')
+  .option('--stop', 'Stop a running dashboard')
+  .action(async (opts: { stop?: boolean }) => {
+    const { execFileSync, spawn } = await import('node:child_process');
+
+    if (opts.stop) {
+      try {
+        execFileSync('pkill', ['-f', 'next.*3400']);
+        console.log('\n  ✓ Dashboard stopped\n');
+      } catch {
+        console.log('\n  No dashboard process found.\n');
+      }
+      return;
+    }
+
+    // Find dashboard directory
+    const candidates = [
+      path.join(process.cwd(), 'dashboard'),
+      path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'dashboard'),
+    ];
+    const dashDir = candidates.find(d => fs.existsSync(path.join(d, 'package.json')));
+
+    if (!dashDir) {
+      console.log('\n  Dashboard not found. Clone the repo and run from the project root:\n');
+      console.log('  git clone https://github.com/odnamta/chief-of-agent');
+      console.log('  cd chief-of-agent/dashboard && npm install && npm run dev\n');
+      return;
+    }
+
+    // Check if already running
+    try {
+      const res = await fetch('http://localhost:3400', { signal: AbortSignal.timeout(1000) });
+      if (res.ok) {
+        console.log('\n  Dashboard already running at http://localhost:3400\n');
+        return;
+      }
+    } catch { /* not running */ }
+
+    console.log(`\n  Starting dashboard from ${dashDir}...`);
+    const child = spawn('npm', ['run', 'dev'], {
+      cwd: dashDir,
+      detached: true,
+      stdio: 'ignore',
+    });
+    child.unref();
+    console.log('  ✓ Dashboard starting at http://localhost:3400');
+    console.log('  Stop with: chief-of-agent dashboard --stop\n');
+  });
+
+program
   .command('discover')
   .description('Scan your Claude Code setup and find unused capabilities')
   .action(() => {
