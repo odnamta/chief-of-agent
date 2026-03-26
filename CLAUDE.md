@@ -97,6 +97,7 @@ Agent governance platform for Claude Code CLI. Monitors sessions, enforces rules
 
 ## Testing
 - TypeScript: vitest, 133 tests across 12 files (src/__tests__/)
+- Total: 164 tests (133 TS + 31 Swift)
 - Swift: swift-testing, 31 tests across 5 files (macos/Tests/)
 - Run single: `npx vitest run src/__tests__/parser.test.ts`
 - Run single: `cd macos && swift test --filter "PendingState"`

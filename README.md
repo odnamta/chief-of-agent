@@ -166,6 +166,63 @@ Claude Code ──hook──► chief-of-agent CLI
 | `~/.chief-of-agent/config.json` | User preferences |
 | `~/.chief-of-agent/summaries.json` | Cached AI summaries |
 | `~/.chief-of-agent/saved_sessions.json` | Bookmarked sessions |
+| `~/.chief-of-agent/webhooks.json` | Webhook endpoints config |
+| `~/.chief-of-agent/decisions.jsonl` | Recent auto-decisions |
+| `~/.chief-of-agent/costs.json` | Per-session cost cache |
+
+---
+
+## Webhooks (Slack / Discord / Custom)
+
+Get notified in Slack or Discord when agents are denied or cost thresholds are exceeded.
+
+```bash
+# Add a Slack webhook
+chief-of-agent webhook add https://hooks.slack.com/xxx --format slack --events deny,error,cost_alert
+
+# Test it
+chief-of-agent webhook test 0
+
+# List configured webhooks
+chief-of-agent webhook list
+```
+
+Supports HMAC-SHA256 signing via `--secret` for webhook verification.
+
+---
+
+## Team Policy Sharing
+
+Export, import, and diff policies across your team.
+
+```bash
+# Export current policies with metadata
+chief-of-agent policy export
+
+# Import team policies (merge mode — preserves your local rules)
+chief-of-agent policy import team-policies.json
+
+# Replace all local rules with team policies
+chief-of-agent policy import team-policies.json --replace
+
+# See what would change before importing
+chief-of-agent policy diff team-policies.json
+```
+
+Supports locked rules — team admins can mark rules that cannot be overridden locally.
+
+---
+
+## Pattern Intelligence
+
+The `suggest` command analyzes your audit log and recommends rules with smart pattern generalization.
+
+```bash
+chief-of-agent suggest          # interactive review
+chief-of-agent suggest --apply  # auto-apply all consistent suggestions
+```
+
+Shows automation metrics: current rate, potential rate if suggestions adopted, estimated daily savings. The dashboard includes a Pattern Intelligence card with the same data.
 
 ---
 
@@ -183,12 +240,12 @@ curl http://127.0.0.1:19222/health
 ## Tests
 
 ```bash
-npm test                          # 97 TypeScript tests
+npm test                          # 133 TypeScript tests
 cd macos && swift test            # 31 Swift tests
 cd dashboard && npm run build     # verify dashboard builds
 ```
 
-128 tests total covering: parser, state management, config, notifications, setup, integration flow, rules engine, AI classifier, audit analysis, pending validation, session store, local summarizer.
+164 tests total covering: parser, state, config, notifications, setup, integration, rules engine, AI classifier, audit, pending validation, session store, local summarizer, respond pipeline, webhooks, policy exchange.
 
 ---
 
